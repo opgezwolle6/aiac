@@ -9,13 +9,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowInsetsControllerCompat
+import com.raremartial.aiac.di.ContextProvider
+import com.raremartial.aiac.di.initKoin
+import javax.net.ssl.SSLContext
 
 class AppActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        setTheme(android.R.style.Theme_Material_NoActionBar)
+        
+        ContextProvider.initialize(this)
+        initKoin()
+        initializeSSLContext()
         setContent { 
-            App(onThemeChanged = { ThemeChanged(it) }) 
+            App(
+                onThemeChanged = { ThemeChanged(it) }
+            ) 
         }
     }
 }
@@ -29,5 +41,13 @@ private fun ThemeChanged(isDark: Boolean) {
             isAppearanceLightStatusBars = isDark
             isAppearanceLightNavigationBars = isDark
         }
+    }
+}
+
+private fun initializeSSLContext() {
+    try {
+        SSLContext.getInstance("TLSv1.2")
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }

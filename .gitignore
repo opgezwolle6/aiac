@@ -1,17 +1,216 @@
+# Gradle
+.gradle/
+build/
+*/build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
 
+# Gradle cache
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+
+# Kotlin
 *.iml
-.gradle
-.idea
-.kotlin
-.DS_Store
-build
-*/build
-captures
-.externalNativeBuild
-.cxx
+.kotlin/
+*.kt.bak
+*.kt.swp
+*.kt~
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/shelf
+.idea/.name
+.idea/compiler.xml
+.idea/copyright/
+.idea/encodings.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/scopes/
+.idea/vcs.xml
+*.iml
+*.ipr
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+.gradle/
 local.properties
-xcuserdata/
-Pods/
+.externalNativeBuild/
+.cxx/
+*.keystore
+!debug.keystore
 *.jks
 *.gpg
-*yarn.lock
+proguard/
+*.hprof
+captures/
+
+# iOS
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+*.xcworkspace
+!default.xcworkspace
+project.xcworkspace/
+xcuserdata/
+Pods/
+*.xcworkspace
+!default.xcworkspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Compose Desktop
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.AppImage
+*.exe
+desktopApp/build/
+
+# KSP (Kotlin Symbol Processing)
+**/build/generated/ksp/
+**/build/generated/kspCaches/
+**/build/generated/kspJvm/
+**/build/generated/kspKotlin/
+
+# Room
+**/build/generated/room/
+**/build/generated/source/kapt/
+
+# Cursor AI
+.cursor/
+.cursorrules
+
+# Secrets and API keys
+local.properties
+*.keystore
+*.jks
+*.gpg
+*.pem
+*.key
+secrets.properties
+.env
+.env.local
+*.secret
+
+# API Configuration (if contains real keys)
+# Uncomment if you want to exclude KoinInit.kt with real credentials
+# sharedUI/src/commonMain/kotlin/com/raremartial/aiac/di/KoinInit.kt
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+tmp/
+temp/
+
+# Package files
+*.jar
+!gradle-wrapper.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Dependency directories
+node_modules/
+.npm
+.yarn/
+yarn.lock
+package-lock.json
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+test-results.xml
+
+# Miscellaneous
+*.bak
+*.backup
+*.orig
+*.rej
+*.sublime-*
+.vscode/
+*.code-workspace
