@@ -1,5 +1,3 @@
-import org.jetbrains.compose.ExperimentalComposeLibrary
-import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
@@ -11,10 +9,11 @@ plugins {
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.room)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.apollo)
 }
 
 kotlin {
+    jvmToolchain(17)
+
     android {
         namespace = "com.raremartial.aiac"
         compileSdk = 36
@@ -23,9 +22,6 @@ kotlin {
     }
 
     jvm()
-
-    js { browser() }
-    wasmJs { browser() }
 
     iosX64()
     iosArm64()
@@ -37,8 +33,11 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(compose.material)
+            implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
+            implementation(libs.kermit)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
@@ -51,22 +50,18 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.coil)
             implementation(libs.coil.network.ktor)
+            implementation(libs.multiplatformSettings)
             implementation(libs.kotlinx.datetime)
             implementation(libs.room.runtime)
-            implementation(libs.apollo.runtime)
-        }
-
-        commonTest.dependencies {
-            implementation(kotlin("test"))
-            @OptIn(ExperimentalComposeLibrary::class)
-            implementation(compose.uiTest)
-            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.koin.core)
+            implementation(libs.koin.compose)
         }
 
         androidMain.dependencies {
             implementation(compose.uiTooling)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.koin.android)
         }
 
         jvmMain.dependencies {
@@ -91,14 +86,6 @@ kotlin {
 
 room {
     schemaDirectory("$projectDir/schemas")
-}
-
-apollo {
-    service("api") {
-        // GraphQL configuration here.
-        // https://www.apollographql.com/docs/kotlin/advanced/plugin-configuration/
-        packageName.set("com.raremartial.aiac.graphql")
-    }
 }
 
 dependencies {
