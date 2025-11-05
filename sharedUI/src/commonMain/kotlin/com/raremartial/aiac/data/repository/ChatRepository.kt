@@ -49,14 +49,12 @@ class ChatRepositoryImpl(
 {
     "title": "краткий заголовок вопроса",
     "answer": "полный развернутый ответ на вопрос",
-    "urls": ["url1", "url2", "url3"],
     "uncertainty_value": 0.5
 }
 
 Где:
 - title: краткий заголовок заданного вопроса
 - answer: полный развернутый текст ответа на вопрос
-- urls: массив строк с URL источниками информации (если есть)
 - uncertainty_value: число от 0 до 1, где 1 означает высокую неопределенность ответа, а 0 - низкую неопределенность
 
 Важно: отвечай ТОЛЬКО валидным JSON объектом, без дополнительного текста."""
@@ -151,7 +149,7 @@ class ChatRepositoryImpl(
 
                 logger.d {
                     "Parsed structured response: title=${structuredResponse.title.take(50)}, " +
-                            "uncertainty=${structuredResponse.uncertainty_value}, urlsCount=${structuredResponse.urls.size}"
+                            "uncertainty=${structuredResponse.uncertainty_value}"
                 }
 
                 // Если неопределенность высокая и мы еще не достигли лимита попыток, делаем повторный запрос

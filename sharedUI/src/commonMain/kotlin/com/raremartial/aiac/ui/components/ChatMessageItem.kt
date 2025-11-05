@@ -80,12 +80,38 @@ fun ChatMessageItem(
                             color = contentColor
                         )
                     } else {
-                        Text(
-                            text = currentMessage.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = contentColor,
-                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                        )
+                        val structuredData = currentMessage.structuredData
+                        if (structuredData != null && !isUser) {
+                            // Отображаем структурированные данные: title и answer
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Заголовок
+                                if (structuredData.title.isNotBlank()) {
+                                    Text(
+                                        text = structuredData.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = contentColor,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
+                                // Ответ
+                                Text(
+                                    text = structuredData.answer,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = contentColor,
+                                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                                )
+                            }
+                        } else {
+                            // Отображаем обычный контент (для пользовательских сообщений или сообщений без structuredData)
+                            Text(
+                                text = currentMessage.content,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = contentColor,
+                                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                            )
+                        }
                     }
                 }
             }
