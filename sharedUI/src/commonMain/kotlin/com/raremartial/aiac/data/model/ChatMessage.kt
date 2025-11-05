@@ -10,7 +10,8 @@ data class ChatMessage(
     val content: String,
     val role: MessageRole,
     val timestamp: Instant,
-    val isPending: Boolean = false
+    val isPending: Boolean = false,
+    val structuredData: StructuredResponse? = null
 )
 
 enum class MessageRole {
