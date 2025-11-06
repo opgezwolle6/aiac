@@ -20,13 +20,13 @@ fun ChatMessageItem(
     modifier: Modifier = Modifier
 ) {
     val isUser = message.role == MessageRole.USER
-
+    
     val backgroundColor = if (isUser) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
-
+    
     val contentColor = if (isUser) {
         MaterialTheme.colorScheme.onPrimaryContainer
     } else {
@@ -36,11 +36,11 @@ fun ChatMessageItem(
     AnimatedContent(
         targetState = message,
         transitionSpec = {
-            fadeIn(animationSpec = tween(300)) +
-                    slideInVertically(
-                        animationSpec = tween(300),
-                        initialOffsetY = { 20 }
-                    ) togetherWith fadeOut(animationSpec = tween(100))
+            fadeIn(animationSpec = tween(300)) + 
+            slideInVertically(
+                animationSpec = tween(300),
+                initialOffsetY = { 20 }
+            ) togetherWith fadeOut(animationSpec = tween(100))
         },
         label = "message_animation"
     ) { currentMessage ->
@@ -57,29 +57,29 @@ fun ChatMessageItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-            ) {
-                Box(
-                    modifier = Modifier
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        ) {
+            Box(
+                modifier = Modifier
                         .widthIn(max = maxMessageWidth)
                         .animateContentSize(
                             animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
                             )
                         )
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(backgroundColor)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
-                ) {
-                    if (currentMessage.isPending) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.5.dp,
-                            color = contentColor
-                        )
-                    } else {
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(backgroundColor)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                if (currentMessage.isPending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.5.dp,
+                        color = contentColor
+                    )
+                } else {
                         val structuredData = currentMessage.structuredData
                         if (structuredData != null && !isUser) {
                             // Отображаем структурированные данные: title и answer
@@ -105,12 +105,12 @@ fun ChatMessageItem(
                             }
                         } else {
                             // Отображаем обычный контент (для пользовательских сообщений или сообщений без structuredData)
-                            Text(
-                                text = currentMessage.content,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = contentColor,
-                                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                            )
+                    Text(
+                        text = currentMessage.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                    )
                         }
                     }
                 }

@@ -10,10 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -36,7 +32,7 @@ fun ChatInput(
         ),
         label = "button_scale"
     )
-
+    
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -49,16 +45,7 @@ fun ChatInput(
             onValueChange = onTextChange,
             modifier = Modifier
                 .weight(1f)
-                .heightIn(min = 56.dp, max = 120.dp)
-                .onPreviewKeyEvent { event ->
-                    if (event.key == Key.Enter && !event.isShiftPressed && isButtonEnabled) {
-                        onSendClick()
-                        keyboardController?.hide()
-                        true
-                    } else {
-                        false
-                    }
-                },
+                .heightIn(min = 56.dp, max = 120.dp),
             enabled = enabled,
             placeholder = { 
                 Text(
@@ -70,10 +57,11 @@ fun ChatInput(
             singleLine = false,
             maxLines = 4,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                imeAction = ImeAction.Send
+                imeAction = ImeAction.Default
             ),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onSend = {
+                onDone = {
+                    // На мобильных устройствах кнопка "Готово" отправляет сообщение
                     if (isButtonEnabled) {
                         onSendClick()
                         keyboardController?.hide()
