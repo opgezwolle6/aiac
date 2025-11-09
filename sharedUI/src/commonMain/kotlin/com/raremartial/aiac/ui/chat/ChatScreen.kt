@@ -37,6 +37,7 @@ import com.raremartial.aiac.theme.LocalThemeIsDark
 import com.raremartial.aiac.ui.components.ChatInput
 import com.raremartial.aiac.ui.components.ChatMessageItem
 import com.raremartial.aiac.ui.components.ErrorSnackbar
+import com.raremartial.aiac.ui.components.SolutionMethodSelector
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -172,11 +173,23 @@ fun ChatScreen(
                             )
                         )
                 ) {
+                    SolutionMethodSelector(
+                        selectedMethods = state.selectedMethods,
+                        onMethodToggle = { method ->
+                            viewModel.handleAction(ChatAction.ToggleSolutionMethod(method))
+                        }
+                    )
+                    
                     ChatInput(
                         text = state.inputText,
                         onTextChange = { viewModel.handleAction(ChatAction.UpdateInputText(it)) },
                         onSendClick = {
-                            viewModel.handleAction(ChatAction.SendMessage(state.inputText))
+                            viewModel.handleAction(
+                                ChatAction.SendMessage(
+                                    state.inputText,
+                                    state.selectedMethods
+                                )
+                            )
                         },
                         enabled = !state.isLoading
                     )

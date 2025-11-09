@@ -32,7 +32,8 @@ class YandexGPTApiImpl(
 
     override suspend fun sendMessage(request: YandexGPTRequest): Result<YandexGPTResponse> {
         val url = "$baseUrl/foundationModels/v1/completion"
-        val fullRequest = request.copy(modelUri = "gpt://$folderId/yandexgpt-lite")
+        // Используем полную версию yandexgpt для более точных ответов
+        val fullRequest = request.copy(modelUri = "gpt://$folderId/yandexgpt")
         
         logger.d { 
             "Sending request to YandexGPT: url=$url, modelUri=${fullRequest.modelUri}, " +

@@ -11,7 +11,10 @@ data class ChatMessage(
     val role: MessageRole,
     val timestamp: Instant,
     val isPending: Boolean = false,
-    val structuredData: StructuredResponse? = null
+    val structuredData: StructuredResponse? = null,
+    val solutionResults: List<SolutionResult> = emptyList(),
+    val comparisonAnalysis: ComparisonAnalysis? = null,
+    val selectedMethods: List<SolutionMethod> = emptyList()
 )
 
 enum class MessageRole {

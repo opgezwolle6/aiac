@@ -32,12 +32,24 @@ class ChatViewModel(
         when (viewEvent) {
             is ChatAction.SendMessage -> {
                 val text = viewEvent.text.trim()
-                if (text.isNotEmpty()) {
-                    sendMessage(text)
+                if (text.isNotEmpty() && viewEvent.methods.isNotEmpty()) {
+                    sendMessage(text, viewEvent.methods)
                 }
             }
             is ChatAction.UpdateInputText -> {
                 viewState = viewState.copy(inputText = viewEvent.text)
+            }
+            is ChatAction.ToggleSolutionMethod -> {
+                val currentMethods = viewState.selectedMethods.toMutableSet()
+                if (currentMethods.contains(viewEvent.method)) {
+                    // Не позволяем убрать последний способ
+                    if (currentMethods.size > 1) {
+                        currentMethods.remove(viewEvent.method)
+                    }
+                } else {
+                    currentMethods.add(viewEvent.method)
+                }
+                viewState = viewState.copy(selectedMethods = currentMethods)
             }
             is ChatAction.ClearError -> {
                 viewState = viewState.copy(error = null)
@@ -52,8 +64,8 @@ class ChatViewModel(
         obtainEvent(action)
     }
 
-    private fun sendMessage(text: String) {
-        logger.d { "Sending message: text=${text.take(50)}..." }
+    private fun sendMessage(text: String, methods: Set<com.raremartial.aiac.data.model.SolutionMethod>) {
+        logger.d { "Sending message: text=${text.take(50)}..., methods=${methods}" }
         
         viewState = viewState.copy(
             inputText = "",
@@ -62,7 +74,7 @@ class ChatViewModel(
         )
         
         withViewModelScope {
-            val result = repository.sendMessage(text)
+            val result = repository.sendMessage(text, methods)
             
             viewState = viewState.copy(isLoading = false)
             
