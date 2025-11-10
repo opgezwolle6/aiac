@@ -38,6 +38,7 @@ import com.raremartial.aiac.ui.components.ChatInput
 import com.raremartial.aiac.ui.components.ChatMessageItem
 import com.raremartial.aiac.ui.components.ErrorSnackbar
 import com.raremartial.aiac.ui.components.SolutionMethodSelector
+import com.raremartial.aiac.ui.components.TemperatureSelector
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,11 +88,11 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
+                title = { 
                     Text(
                         "YandexGPT Чат",
                         style = MaterialTheme.typography.titleLarge
-                    )
+                    ) 
                 },
                 actions = {
                     val themeState = LocalThemeIsDark.current
@@ -122,32 +123,32 @@ fun ChatScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             Column {
-                LazyColumn(
-                    state = listState,
+            LazyColumn(
+                state = listState,
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    items(
-                        items = state.messages,
-                        key = { it.id }
-                    ) { message ->
-                        ChatMessageItem(message = message)
-                    }
-
-                    if (state.messages.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(
+                    items = state.messages,
+                    key = { it.id }
+                ) { message ->
+                    ChatMessageItem(message = message)
+                }
+                
+                if (state.messages.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
+                        ) {
+                            Text(
                                         text = "Начните диалог с YandexGPT",
                                         style = MaterialTheme.typography.headlineSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
@@ -155,24 +156,24 @@ fun ChatScreen(
                                     Text(
                                         text = "Введите сообщение и нажмите Enter или отправьте",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
                                 }
-                            }
                         }
                     }
                 }
+            }
 
-                Column(
-                    modifier = Modifier
-                        .background(
-                            MaterialTheme.colorScheme.surface,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
-                                topStart = 16.dp,
-                                topEnd = 16.dp
-                            )
+            Column(
+                modifier = Modifier
+                    .background(
+                        MaterialTheme.colorScheme.surface,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                            topStart = 16.dp,
+                            topEnd = 16.dp
                         )
-                ) {
+                    )
+            ) {
                     SolutionMethodSelector(
                         selectedMethods = state.selectedMethods,
                         onMethodToggle = { method ->
@@ -180,19 +181,27 @@ fun ChatScreen(
                         }
                     )
                     
-                    ChatInput(
-                        text = state.inputText,
-                        onTextChange = { viewModel.handleAction(ChatAction.UpdateInputText(it)) },
-                        onSendClick = {
+                    TemperatureSelector(
+                        selectedTemperature = state.selectedTemperature,
+                        onTemperatureSelected = { temperature ->
+                            viewModel.handleAction(ChatAction.SetTemperature(temperature))
+                        }
+                    )
+                    
+                ChatInput(
+                    text = state.inputText,
+                    onTextChange = { viewModel.handleAction(ChatAction.UpdateInputText(it)) },
+                    onSendClick = {
                             viewModel.handleAction(
                                 ChatAction.SendMessage(
                                     state.inputText,
-                                    state.selectedMethods
+                                    state.selectedMethods,
+                                    state.selectedTemperature
                                 )
                             )
-                        },
-                        enabled = !state.isLoading
-                    )
+                    },
+                    enabled = !state.isLoading
+                )
                 }
             }
         }

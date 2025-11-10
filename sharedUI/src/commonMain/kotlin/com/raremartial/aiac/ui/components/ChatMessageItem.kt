@@ -183,15 +183,15 @@ fun ChatMessageItem(
                         }
                         // Обычный контент
                         else -> {
-                            Text(
-                                text = currentMessage.content,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = contentColor,
-                                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                            )
-                        }
-                    }
+                    Text(
+                        text = currentMessage.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                    )
                 }
+            }
+        }
                 }
             }
         }

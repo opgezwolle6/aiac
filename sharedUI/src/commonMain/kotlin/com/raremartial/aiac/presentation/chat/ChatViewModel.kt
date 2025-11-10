@@ -33,8 +33,11 @@ class ChatViewModel(
             is ChatAction.SendMessage -> {
                 val text = viewEvent.text.trim()
                 if (text.isNotEmpty() && viewEvent.methods.isNotEmpty()) {
-                    sendMessage(text, viewEvent.methods)
+                    sendMessage(text, viewEvent.methods, viewEvent.temperature)
                 }
+            }
+            is ChatAction.SetTemperature -> {
+                viewState = viewState.copy(selectedTemperature = viewEvent.temperature)
             }
             is ChatAction.UpdateInputText -> {
                 viewState = viewState.copy(inputText = viewEvent.text)
@@ -64,8 +67,12 @@ class ChatViewModel(
         obtainEvent(action)
     }
 
-    private fun sendMessage(text: String, methods: Set<com.raremartial.aiac.data.model.SolutionMethod>) {
-        logger.d { "Sending message: text=${text.take(50)}..., methods=${methods}" }
+    private fun sendMessage(
+        text: String,
+        methods: Set<com.raremartial.aiac.data.model.SolutionMethod>,
+        temperature: com.raremartial.aiac.data.model.Temperature
+    ) {
+        logger.d { "Sending message: text=${text.take(50)}..., methods=${methods}, temperature=${temperature.name}" }
         
         viewState = viewState.copy(
             inputText = "",
@@ -74,7 +81,7 @@ class ChatViewModel(
         )
         
         withViewModelScope {
-            val result = repository.sendMessage(text, methods)
+            val result = repository.sendMessage(text, methods, temperature)
             
             viewState = viewState.copy(isLoading = false)
             

@@ -8,6 +8,7 @@ import com.raremartial.aiac.data.model.MessageRole
 import com.raremartial.aiac.data.model.SolutionMethod
 import com.raremartial.aiac.data.model.SolutionResult
 import com.raremartial.aiac.data.model.StructuredResponse
+import com.raremartial.aiac.data.model.Temperature
 import com.raremartial.aiac.network.YandexGPTApi
 import com.raremartial.aiac.network.models.CompletionOptions
 import com.raremartial.aiac.network.models.Message
@@ -30,7 +31,8 @@ interface ChatRepository {
 
     suspend fun sendMessage(
         text: String,
-        methods: Set<SolutionMethod> = setOf(SolutionMethod.DIRECT)
+        methods: Set<SolutionMethod> = setOf(SolutionMethod.DIRECT),
+        temperature: Temperature = Temperature.MEDIUM
     ): Result<ChatMessage>
 
     suspend fun clearHistory()
@@ -53,6 +55,23 @@ class ChatRepositoryImpl(
     override val messages: Flow<List<ChatMessage>> = _messages.asStateFlow()
 
     companion object {
+        /**
+         * Минимальный JSON формат - используется когда выбрана температура
+         * Содержит только формат ответа без дополнительных инструкций
+         */
+        private const val MINIMAL_JSON_FORMAT =
+         """Ты — универсальный AI-ассистент. Ответь на запрос пользователя ясно и полно, в свободной форме, без ограничения стиля.
+              Используй свои собственные ассоциации, знания и стиль изложения. Дай естественный, цельный ответ на вопрос.
+             Твой ответ должен быть валидным JSON объектом в следующем формате:
+            {
+                "title": "краткий заголовок",
+                "answer": "ответ на вопрос",
+                "uncertainty_value": 1.0,
+                "questions": []
+            }
+            
+            Возвращай только JSON, без markdown разметки и дополнительного текста."""
+
         private const val BASE_JSON_FORMAT =
             """Твой ответ должен быть ТОЛЬКО валидным JSON объектом без дополнительного текста, без markdown разметки, без обёрток ```json``` или ```.
 
@@ -84,7 +103,17 @@ class ChatRepositoryImpl(
             
             ВАЖНО: Всегда возвращай валидный JSON. Никаких комментариев, никакой markdown разметки."""
 
-        private fun getSystemPrompt(method: SolutionMethod): String {
+        /**
+         * Возвращает системный промпт в зависимости от метода решения и температуры
+         * Когда используется температура, возвращается минимальный JSON формат без ограничений
+         * Это позволяет YandexGPT быть более свободным в ответах, контролируя только формат вывода
+         */
+        private fun getSystemPrompt(method: SolutionMethod, temperature: Temperature): String {
+            // Всегда используем минимальный формат, когда выбрана температура
+            // Это позволяет YandexGPT быть более свободным в ответах
+            return MINIMAL_JSON_FORMAT
+            
+            /* ЗАКОММЕНТИРОВАНО - детальные промпты для методов решения временно не используются
             return when (method) {
                 SolutionMethod.DIRECT -> {
                     """⚠️ ВАЖНО: Ты используешь способ "ПРЯМОЙ ОТВЕТ" - это САМЫЙ ПРОСТОЙ способ, но ответ должен быть ТОЧНЫМ и ПРАВИЛЬНЫМ.
@@ -343,6 +372,7 @@ class ChatRepositoryImpl(
             ЗАПОМНИ: Эксперты - это ПРОФЕССИОНАЛЫ ВЫСШЕГО УРОВНЯ, которые РЕАЛЬНО применяют методы своей науки для БЕЗОШИБОЧНОГО решения задачи. Это САМЫЙ ТОЧНЫЙ способ - ошибки недопустимы. Используй формулы, расчеты, формализацию для обоснования правильности решения. НО ГЛАВНОЕ - каждый эксперт ДОЛЖЕН дать КОНКРЕТНЫЙ ИТОГОВЫЙ ОТВЕТ на задачу, а не просто описать процесс."""
                 }
             }
+            */
         }
 
         private const val COMPARISON_PROMPT =
@@ -365,22 +395,22 @@ class ChatRepositoryImpl(
         private const val UNCERTAINTY_THRESHOLD = 0.1
         
         /**
-         * Возвращает оптимальную температуру для способа решения
-         * Низкая температура (0.1-0.2) для логических задач обеспечивает более точные и детерминированные ответы
-         * Для экспертов используется минимальная температура (0.1) для максимальной точности
+         * Возвращает значение температуры
+         * Используются три типа температуры: 0.0, 0.5, 1.0
          */
-        private fun getTemperatureForMethod(method: SolutionMethod): Double {
-            return when (method) {
-                SolutionMethod.DIRECT -> 0.2  // Низкая температура для точных прямых ответов
-                SolutionMethod.STEP_BY_STEP -> 0.15  // Еще ниже для более точных пошаговых ответов
-                SolutionMethod.EXPERT_PANEL -> 0.1  // Очень низкая температура для максимальной точности экспертов - ошибки недопустимы
+        private fun getTemperatureValue(temperature: Temperature): Double {
+            return when (temperature) {
+                Temperature.LOW -> 0.0   // Низкая температура - детерминированные, точные ответы
+                Temperature.MEDIUM -> 0.5  // Средняя температура - сбалансированные ответы
+                Temperature.HIGH -> 1.0  // Высокая температура - креативные, разнообразные ответы
             }
         }
     }
 
     override suspend fun sendMessage(
         text: String,
-        methods: Set<SolutionMethod>
+        methods: Set<SolutionMethod>,
+        temperature: Temperature
     ): Result<ChatMessage> {
         val userMessage = ChatMessage(
             id = ChatMessageMapper.generateId(),
@@ -395,11 +425,11 @@ class ChatRepositoryImpl(
         // Если выбран только один способ, используем старую логику
         if (methods.size == 1) {
             val method = methods.first()
-            return sendMessageWithMethod(text, method, userMessage)
+            return sendMessageWithMethod(text, method, userMessage, temperature)
         }
 
         // Если выбрано несколько способов, отправляем запросы параллельно
-        return sendMessageWithMultipleMethods(text, methods, userMessage)
+        return sendMessageWithMultipleMethods(text, methods, userMessage, temperature)
     }
 
     /**
@@ -408,7 +438,8 @@ class ChatRepositoryImpl(
     private suspend fun sendMessageWithMethod(
         text: String,
         method: SolutionMethod,
-        userMessage: ChatMessage
+        userMessage: ChatMessage,
+        temperature: Temperature
     ): Result<ChatMessage> {
         val pendingMessage = ChatMessage(
             id = ChatMessageMapper.generateId(),
@@ -423,18 +454,18 @@ class ChatRepositoryImpl(
             .filter { !it.isPending && it.id != pendingMessage.id }
             .map { ChatMessageMapper.toNetwork(it) }
 
-        val systemPrompt = getSystemPrompt(method)
+        val systemPrompt = getSystemPrompt(method, temperature)
         val networkMessages =
             listOf(Message(role = "system", text = systemPrompt)) + conversationHistory
 
-        val temperature = getTemperatureForMethod(method)
+        val temperatureValue = getTemperatureValue(temperature)
         val request = YandexGPTRequest(
             modelUri = "",
-            completionOptions = CompletionOptions(temperature = temperature),
+            completionOptions = CompletionOptions(temperature = temperatureValue),
             messages = networkMessages
         )
 
-        logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperature" }
+        logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name})" }
 
         val result = api.sendMessage(request)
 
@@ -490,7 +521,8 @@ class ChatRepositoryImpl(
     private suspend fun sendMessageWithMultipleMethods(
         text: String,
         methods: Set<SolutionMethod>,
-        userMessage: ChatMessage
+        userMessage: ChatMessage,
+        temperature: Temperature
     ): Result<ChatMessage> {
         val pendingMessage = ChatMessage(
             id = ChatMessageMapper.generateId(),
@@ -509,18 +541,18 @@ class ChatRepositoryImpl(
         val solutionResults = coroutineScope {
             methods.map { method ->
                 async {
-                    val systemPrompt = getSystemPrompt(method)
+                    val systemPrompt = getSystemPrompt(method, temperature)
                     val networkMessages =
                         listOf(Message(role = "system", text = systemPrompt)) + conversationHistory
 
-                    val temperature = getTemperatureForMethod(method)
+                    val temperatureValue = getTemperatureValue(temperature)
                     val request = YandexGPTRequest(
                         modelUri = "",
-                        completionOptions = CompletionOptions(temperature = temperature),
+                        completionOptions = CompletionOptions(temperature = temperatureValue),
                         messages = networkMessages
                     )
 
-                    logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperature" }
+                    logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name})" }
 
                     val result = api.sendMessage(request)
 

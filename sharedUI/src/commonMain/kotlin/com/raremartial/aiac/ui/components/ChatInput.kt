@@ -32,7 +32,7 @@ fun ChatInput(
         ),
         label = "button_scale"
     )
-    
+
     Row(
         modifier = modifier
             .fillMaxWidth()
