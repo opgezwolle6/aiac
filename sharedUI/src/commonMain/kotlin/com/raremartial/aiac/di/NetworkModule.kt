@@ -1,5 +1,7 @@
 package com.raremartial.aiac.di
 
+import com.raremartial.aiac.network.HuggingFaceApi
+import com.raremartial.aiac.network.HuggingFaceApiImpl
 import com.raremartial.aiac.network.YandexGPTApi
 import com.raremartial.aiac.network.YandexGPTApiImpl
 import io.ktor.client.HttpClient
@@ -16,6 +18,13 @@ val networkModule = module {
             httpClient = get(),
             apiKey = YandexConfig.API_KEY,
             folderId = YandexConfig.FOLDER_ID
+        )
+    }
+    
+    single<HuggingFaceApi> {
+        HuggingFaceApiImpl(
+            httpClient = get(),
+            apiKey = YandexConfig.HUGGINGFACE_API_KEY
         )
     }
 }

@@ -19,7 +19,12 @@ fun initKoin() {
     }
 }
 
+/**
+ * Конфигурация Yandex Cloud
+ * Использует значения из Secrets.kt
+ */
 object YandexConfig {
-    const val API_KEY = "AQVNxWYboO9rXcL-UJaOfUw5Zac_Q-4H9lu4kqHx"
-    const val FOLDER_ID = "b1gp6hvn5r1h3u5hmph1"
+    const val API_KEY = Secrets.YANDEX_API_KEY
+    const val FOLDER_ID = Secrets.YANDEX_FOLDER_ID
+    const val HUGGINGFACE_API_KEY = Secrets.HUGGINGFACE_API_KEY
 }

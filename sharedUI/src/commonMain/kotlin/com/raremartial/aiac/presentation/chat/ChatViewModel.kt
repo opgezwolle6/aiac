@@ -54,6 +54,27 @@ class ChatViewModel(
                 }
                 viewState = viewState.copy(selectedMethods = currentMethods)
             }
+            is ChatAction.CompareModels -> {
+                val text = viewEvent.text.trim()
+                if (text.isNotEmpty()) {
+                    compareModels(
+                        text,
+                        viewEvent.firstModel,
+                        viewEvent.secondModel,
+                        viewEvent.thirdModel,
+                        viewEvent.temperature
+                    )
+                }
+            }
+            is ChatAction.SetFirstModel -> {
+                viewState = viewState.copy(firstModel = viewEvent.model)
+            }
+            is ChatAction.SetSecondModel -> {
+                viewState = viewState.copy(secondModel = viewEvent.model)
+            }
+            is ChatAction.SetThirdModel -> {
+                viewState = viewState.copy(thirdModel = viewEvent.model)
+            }
             is ChatAction.ClearError -> {
                 viewState = viewState.copy(error = null)
             }
@@ -92,6 +113,54 @@ class ChatViewModel(
                 },
                 onFailure = { e ->
                     logger.e(e) { "Failed to send message: ${e.message}" }
+                    val errorMessage = e.message ?: "Unknown error occurred"
+                    viewState = viewState.copy(error = errorMessage)
+                    viewAction = ChatEvent.ShowError(errorMessage)
+                }
+            )
+        }
+    }
+
+    private fun compareModels(
+        text: String,
+        firstModel: com.raremartial.aiac.data.model.ModelInfo,
+        secondModel: com.raremartial.aiac.data.model.ModelInfo,
+        thirdModel: com.raremartial.aiac.data.model.ModelInfo,
+        temperature: com.raremartial.aiac.data.model.Temperature
+    ) {
+        logger.d {
+            "Comparing models: firstModel=${firstModel.name}, secondModel=${secondModel.name}, thirdModel=${thirdModel.name}, " +
+            "temperature=${temperature.name}, text=${text.take(50)}..."
+        }
+
+        viewState = viewState.copy(
+            inputText = "",
+            isComparingModels = true,
+            isLoading = true,
+            error = null,
+            modelComparisonResult = null
+        )
+
+        withViewModelScope {
+            val result = repository.compareModels(text, firstModel, secondModel, thirdModel, temperature)
+
+            viewState = viewState.copy(
+                isLoading = false,
+                isComparingModels = false
+            )
+
+            result.fold(
+                onSuccess = { comparisonResult ->
+                    logger.d {
+                        "Model comparison completed: " +
+                        "firstModel=${comparisonResult.firstModel.modelInfo.name} (${comparisonResult.firstModel.responseTimeMs}ms), " +
+                        "secondModel=${comparisonResult.secondModel.modelInfo.name} (${comparisonResult.secondModel.responseTimeMs}ms)"
+                    }
+                    viewState = viewState.copy(modelComparisonResult = comparisonResult)
+                    viewAction = ChatEvent.ScrollToBottom
+                },
+                onFailure = { e ->
+                    logger.e(e) { "Failed to compare models: ${e.message}" }
                     val errorMessage = e.message ?: "Unknown error occurred"
                     viewState = viewState.copy(error = errorMessage)
                     viewAction = ChatEvent.ShowError(errorMessage)

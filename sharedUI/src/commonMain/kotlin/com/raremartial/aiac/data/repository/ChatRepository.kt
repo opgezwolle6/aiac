@@ -5,16 +5,22 @@ import com.raremartial.aiac.data.mapper.ChatMessageMapper
 import com.raremartial.aiac.data.model.ChatMessage
 import com.raremartial.aiac.data.model.ComparisonAnalysis
 import com.raremartial.aiac.data.model.MessageRole
+import com.raremartial.aiac.data.model.ModelComparisonResult
+import com.raremartial.aiac.data.model.ModelInfo
+import com.raremartial.aiac.data.model.ModelResponse
 import com.raremartial.aiac.data.model.SolutionMethod
 import com.raremartial.aiac.data.model.SolutionResult
 import com.raremartial.aiac.data.model.StructuredResponse
 import com.raremartial.aiac.data.model.Temperature
+import com.raremartial.aiac.network.HuggingFaceApi
 import com.raremartial.aiac.network.YandexGPTApi
 import com.raremartial.aiac.network.models.CompletionOptions
+import com.raremartial.aiac.network.models.HuggingFaceRequest
 import com.raremartial.aiac.network.models.Message
 import com.raremartial.aiac.network.models.YandexGPTRequest
 import com.raremartial.aiac.util.currentTime
 import kotlinx.coroutines.async
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +31,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.ExperimentalTime
+import kotlin.time.Duration
 
 interface ChatRepository {
     val messages: Flow<List<ChatMessage>>
@@ -35,12 +42,24 @@ interface ChatRepository {
         temperature: Temperature = Temperature.MEDIUM
     ): Result<ChatMessage>
 
+    /**
+     * Отправляет запрос к трем моделям HuggingFace параллельно и сравнивает результаты
+     */
+    suspend fun compareModels(
+        text: String,
+        firstModel: ModelInfo,
+        secondModel: ModelInfo,
+        thirdModel: ModelInfo,
+        temperature: Temperature = Temperature.MEDIUM
+    ): Result<ModelComparisonResult>
+
     suspend fun clearHistory()
 }
 
 @OptIn(ExperimentalTime::class)
 class ChatRepositoryImpl(
     private val api: YandexGPTApi,
+    private val huggingFaceApi: HuggingFaceApi,
     private val folderId: String
 ) : ChatRepository {
 
@@ -1004,6 +1023,341 @@ class ChatRepositoryImpl(
             json.encodeToString(StructuredResponse.serializer(), response)
         } catch (e: Exception) {
             "Failed to format structured response: ${e.message}"
+        }
+    }
+
+    override suspend fun compareModels(
+        text: String,
+        firstModel: ModelInfo,
+        secondModel: ModelInfo,
+        thirdModel: ModelInfo,
+        temperature: Temperature
+    ): Result<ModelComparisonResult> {
+        logger.d {
+            "Comparing models: firstModel=${firstModel.id}, secondModel=${secondModel.id}, thirdModel=${thirdModel.id}, " +
+            "temperature=${temperature.name}, text=${text.take(50)}..."
+        }
+
+        val temperatureValue = getTemperatureValue(temperature)
+        val systemPrompt = getSystemPrompt(SolutionMethod.DIRECT, temperature)
+
+        // Формируем сообщения для HuggingFace API
+        val messages = listOf(
+            com.raremartial.aiac.network.models.ChatMessage(
+                role = "system",
+                content = systemPrompt
+            ),
+            com.raremartial.aiac.network.models.ChatMessage(
+                role = "user",
+                content = text
+            )
+        )
+
+        return try {
+            // Отправляем запросы параллельно
+            val (firstResult, secondResult, thirdResult) = coroutineScope {
+                val firstDeferred = async {
+                    val startTime = currentTime()
+                    val request = HuggingFaceRequest(
+                        model = firstModel.id,
+                        messages = messages,
+                        temperature = temperatureValue,
+                        max_tokens = 2000
+                    )
+                    val result = huggingFaceApi.sendMessage(request)
+                    val endTime = currentTime()
+                    val duration: Duration = endTime - startTime
+                    Triple(result, duration.inWholeMilliseconds, firstModel)
+                }
+
+                val secondDeferred = async {
+                    val startTime = currentTime()
+                    val request = HuggingFaceRequest(
+                        model = secondModel.id,
+                        messages = messages,
+                        temperature = temperatureValue,
+                        max_tokens = 2000
+                    )
+                    val result = huggingFaceApi.sendMessage(request)
+                    val endTime = currentTime()
+                    val duration: Duration = endTime - startTime
+                    Triple(result, duration.inWholeMilliseconds, secondModel)
+                }
+
+                val thirdDeferred = async {
+                    val startTime = currentTime()
+                    val request = HuggingFaceRequest(
+                        model = thirdModel.id,
+                        messages = messages,
+                        temperature = temperatureValue,
+                        max_tokens = 2000
+                    )
+                    val result = huggingFaceApi.sendMessage(request)
+                    val endTime = currentTime()
+                    val duration: Duration = endTime - startTime
+                    Triple(result, duration.inWholeMilliseconds, thirdModel)
+                }
+
+                Triple(firstDeferred.await(), secondDeferred.await(), thirdDeferred.await())
+            }
+
+            // Обрабатываем результаты первой модели
+            val firstModelResponse = firstResult.first.fold(
+                onSuccess = { response ->
+                    val content = response.choices.firstOrNull()?.message?.content ?: ""
+                    val structuredResponse = parseStructuredResponse(content)
+
+                    ModelResponse(
+                        modelInfo = firstResult.third,
+                        answer = structuredResponse?.answer ?: content,
+                        title = structuredResponse?.title ?: "",
+                        responseTimeMs = firstResult.second,
+                        inputTokens = response.usage?.prompt_tokens ?: 0,
+                        outputTokens = response.usage?.completion_tokens ?: 0,
+                        totalTokens = response.usage?.total_tokens ?: 0
+                    )
+                },
+                onFailure = { exception ->
+                    ModelResponse(
+                        modelInfo = firstResult.third,
+                        answer = "",
+                        title = "",
+                        responseTimeMs = firstResult.second,
+                        inputTokens = 0,
+                        outputTokens = 0,
+                        totalTokens = 0,
+                        error = exception.message
+                    )
+                }
+            )
+
+            // Обрабатываем результаты второй модели
+            val secondModelResponse = secondResult.first.fold(
+                onSuccess = { response ->
+                    val content = response.choices.firstOrNull()?.message?.content ?: ""
+                    val structuredResponse = parseStructuredResponse(content)
+
+                    ModelResponse(
+                        modelInfo = secondResult.third,
+                        answer = structuredResponse?.answer ?: content,
+                        title = structuredResponse?.title ?: "",
+                        responseTimeMs = secondResult.second,
+                        inputTokens = response.usage?.prompt_tokens ?: 0,
+                        outputTokens = response.usage?.completion_tokens ?: 0,
+                        totalTokens = response.usage?.total_tokens ?: 0
+                    )
+                },
+                onFailure = { exception ->
+                    ModelResponse(
+                        modelInfo = secondResult.third,
+                        answer = "",
+                        title = "",
+                        responseTimeMs = secondResult.second,
+                        inputTokens = 0,
+                        outputTokens = 0,
+                        totalTokens = 0,
+                        error = exception.message
+                    )
+                }
+            )
+
+            // Обрабатываем результаты третьей модели
+            val thirdModelResponse = thirdResult.first.fold(
+                onSuccess = { response ->
+                    val content = response.choices.firstOrNull()?.message?.content ?: ""
+                    val structuredResponse = parseStructuredResponse(content)
+
+                    ModelResponse(
+                        modelInfo = thirdResult.third,
+                        answer = structuredResponse?.answer ?: content,
+                        title = structuredResponse?.title ?: "",
+                        responseTimeMs = thirdResult.second,
+                        inputTokens = response.usage?.prompt_tokens ?: 0,
+                        outputTokens = response.usage?.completion_tokens ?: 0,
+                        totalTokens = response.usage?.total_tokens ?: 0
+                    )
+                },
+                onFailure = { exception ->
+                    ModelResponse(
+                        modelInfo = thirdResult.third,
+                        answer = "",
+                        title = "",
+                        responseTimeMs = thirdResult.second,
+                        inputTokens = 0,
+                        outputTokens = 0,
+                        totalTokens = 0,
+                        error = exception.message
+                    )
+                }
+            )
+
+            // Находим самую быструю и самую медленную модель
+            val models = listOf(firstModelResponse, secondModelResponse, thirdModelResponse)
+            val fastestModel = models.minByOrNull { it.responseTimeMs }
+            val slowestModel = models.maxByOrNull { it.responseTimeMs }
+            val mostEfficientModel = models.minByOrNull { it.totalTokens }
+            val leastEfficientModel = models.maxByOrNull { it.totalTokens }
+
+            // Определяем, какая модель лучше по разным критериям
+            val firstModelHasError = firstModelResponse.error != null
+            val secondModelHasError = secondModelResponse.error != null
+            val thirdModelHasError = thirdModelResponse.error != null
+
+            // Формируем преимущества и недостатки для каждой модели
+            val firstModelPros = mutableListOf<String>()
+            val firstModelCons = mutableListOf<String>()
+            val secondModelPros = mutableListOf<String>()
+            val secondModelCons = mutableListOf<String>()
+            val thirdModelPros = mutableListOf<String>()
+            val thirdModelCons = mutableListOf<String>()
+
+            // Сравнение скорости
+            if (fastestModel?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelPros.add("Самая быстрая (${firstModelResponse.responseTimeMs}мс)")
+            } else if (slowestModel?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelCons.add("Самая медленная (${firstModelResponse.responseTimeMs}мс)")
+            }
+
+            if (fastestModel?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelPros.add("Самая быстрая (${secondModelResponse.responseTimeMs}мс)")
+            } else if (slowestModel?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelCons.add("Самая медленная (${secondModelResponse.responseTimeMs}мс)")
+            }
+
+            if (fastestModel?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelPros.add("Самая быстрая (${thirdModelResponse.responseTimeMs}мс)")
+            } else if (slowestModel?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelCons.add("Самая медленная (${thirdModelResponse.responseTimeMs}мс)")
+            }
+
+            // Сравнение эффективности токенов
+            if (mostEfficientModel?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelPros.add("Самая эффективная по токенам (${firstModelResponse.totalTokens})")
+            } else if (leastEfficientModel?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelCons.add("Наименее эффективная по токенам (${firstModelResponse.totalTokens})")
+            }
+
+            if (mostEfficientModel?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelPros.add("Самая эффективная по токенам (${secondModelResponse.totalTokens})")
+            } else if (leastEfficientModel?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelCons.add("Наименее эффективная по токенам (${secondModelResponse.totalTokens})")
+            }
+
+            if (mostEfficientModel?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelPros.add("Самая эффективная по токенам (${thirdModelResponse.totalTokens})")
+            } else if (leastEfficientModel?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelCons.add("Наименее эффективная по токенам (${thirdModelResponse.totalTokens})")
+            }
+
+            // Проверка ошибок
+            if (firstModelHasError) {
+                firstModelCons.add("Ошибка: ${firstModelResponse.error}")
+            } else {
+                firstModelPros.add("Успешно выполнен запрос")
+            }
+
+            if (secondModelHasError) {
+                secondModelCons.add("Ошибка: ${secondModelResponse.error}")
+            } else {
+                secondModelPros.add("Успешно выполнен запрос")
+            }
+
+            if (thirdModelHasError) {
+                thirdModelCons.add("Ошибка: ${thirdModelResponse.error}")
+            } else {
+                thirdModelPros.add("Успешно выполнен запрос")
+            }
+
+            // Сравниваем длину ответов
+            val longestAnswer = models.maxByOrNull { it.answer.length }
+            val shortestAnswer = models.minByOrNull { it.answer.length }
+            
+            if (longestAnswer?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelPros.add("Самый подробный ответ")
+            } else if (shortestAnswer?.modelInfo?.id == firstModelResponse.modelInfo.id) {
+                firstModelCons.add("Самый краткий ответ")
+            }
+
+            if (longestAnswer?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelPros.add("Самый подробный ответ")
+            } else if (shortestAnswer?.modelInfo?.id == secondModelResponse.modelInfo.id) {
+                secondModelCons.add("Самый краткий ответ")
+            }
+
+            if (longestAnswer?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelPros.add("Самый подробный ответ")
+            } else if (shortestAnswer?.modelInfo?.id == thirdModelResponse.modelInfo.id) {
+                thirdModelCons.add("Самый краткий ответ")
+            }
+
+            // Формируем резюме
+            val summary = buildString {
+                appendLine("Сравнение трех моделей: ${firstModelResponse.modelInfo.name}, ${secondModelResponse.modelInfo.name}, ${thirdModelResponse.modelInfo.name}")
+                appendLine()
+                appendLine("Производительность:")
+                appendLine("  • ${firstModelResponse.modelInfo.name}: ${firstModelResponse.responseTimeMs}мс, ${firstModelResponse.totalTokens} токенов")
+                appendLine("  • ${secondModelResponse.modelInfo.name}: ${secondModelResponse.responseTimeMs}мс, ${secondModelResponse.totalTokens} токенов")
+                appendLine("  • ${thirdModelResponse.modelInfo.name}: ${thirdModelResponse.responseTimeMs}мс, ${thirdModelResponse.totalTokens} токенов")
+                if (fastestModel != null && slowestModel != null && fastestModel != slowestModel) {
+                    val timeDiff = slowestModel.responseTimeMs - fastestModel.responseTimeMs
+                    appendLine("  • Самая быстрая: ${fastestModel.modelInfo.name}, разница: ${timeDiff}мс")
+                }
+                appendLine()
+                if (firstModelHasError || secondModelHasError || thirdModelHasError) {
+                    appendLine("Ошибки:")
+                    if (firstModelHasError) appendLine("  • ${firstModelResponse.modelInfo.name}: ${firstModelResponse.error}")
+                    if (secondModelHasError) appendLine("  • ${secondModelResponse.modelInfo.name}: ${secondModelResponse.error}")
+                    if (thirdModelHasError) appendLine("  • ${thirdModelResponse.modelInfo.name}: ${thirdModelResponse.error}")
+                }
+            }
+
+            // Формируем рекомендацию
+            val recommendation = when {
+                firstModelHasError && !secondModelHasError && !thirdModelHasError -> 
+                    "Рекомендуется использовать ${secondModelResponse.modelInfo.name} или ${thirdModelResponse.modelInfo.name}, так как ${firstModelResponse.modelInfo.name} завершился с ошибкой."
+                secondModelHasError && !firstModelHasError && !thirdModelHasError -> 
+                    "Рекомендуется использовать ${firstModelResponse.modelInfo.name} или ${thirdModelResponse.modelInfo.name}, так как ${secondModelResponse.modelInfo.name} завершился с ошибкой."
+                thirdModelHasError && !firstModelHasError && !secondModelHasError -> 
+                    "Рекомендуется использовать ${firstModelResponse.modelInfo.name} или ${secondModelResponse.modelInfo.name}, так как ${thirdModelResponse.modelInfo.name} завершился с ошибкой."
+                fastestModel != null && mostEfficientModel != null && fastestModel.modelInfo.id == mostEfficientModel.modelInfo.id -> 
+                    "Рекомендуется использовать ${fastestModel.modelInfo.name} - она самая быстрая и эффективная по использованию токенов."
+                fastestModel != null -> 
+                    "Рекомендуется использовать ${fastestModel.modelInfo.name} - она самая быстрая."
+                mostEfficientModel != null -> 
+                    "Рекомендуется использовать ${mostEfficientModel.modelInfo.name} - она самая эффективная по использованию токенов."
+                else -> 
+                    "Все модели показали схожие результаты. Выбор зависит от конкретных требований."
+            }
+
+            val comparison = ComparisonAnalysis(
+                summary = summary.trim(),
+                prosAndCons = mapOf(
+                    firstModelResponse.modelInfo.name to (firstModelPros + firstModelCons.map { "Недостаток: $it" }),
+                    secondModelResponse.modelInfo.name to (secondModelPros + secondModelCons.map { "Недостаток: $it" }),
+                    thirdModelResponse.modelInfo.name to (thirdModelPros + thirdModelCons.map { "Недостаток: $it" })
+                ),
+                recommendation = recommendation,
+                bestMethod = null // Для сравнения моделей это поле не применимо
+            )
+
+            val comparisonResult = ModelComparisonResult(
+                firstModel = firstModelResponse,
+                secondModel = secondModelResponse,
+                thirdModel = thirdModelResponse,
+                comparison = comparison
+            )
+
+            logger.d {
+                "Model comparison completed: " +
+                "firstModel=${firstModelResponse.modelInfo.name} (${firstModelResponse.responseTimeMs}ms, ${firstModelResponse.totalTokens}tokens), " +
+                "secondModel=${secondModelResponse.modelInfo.name} (${secondModelResponse.responseTimeMs}ms, ${secondModelResponse.totalTokens}tokens), " +
+                "thirdModel=${thirdModelResponse.modelInfo.name} (${thirdModelResponse.responseTimeMs}ms, ${thirdModelResponse.totalTokens}tokens)"
+            }
+
+            Result.success(comparisonResult)
+        } catch (e: Exception) {
+            logger.e(e) { "Failed to compare models: ${e.message}" }
+            Result.failure(e)
         }
     }
 

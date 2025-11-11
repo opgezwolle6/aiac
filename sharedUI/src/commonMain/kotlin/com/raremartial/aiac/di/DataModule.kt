@@ -9,6 +9,7 @@ val dataModule = module {
     single<ChatRepository> {
         ChatRepositoryImpl(
             api = get(),
+            huggingFaceApi = get(),
             folderId = YandexConfig.FOLDER_ID
         )
     }
