@@ -163,9 +163,8 @@ secrets.properties
 .env.local
 *.secret
 
-# API Configuration (if contains real keys)
-# Uncomment if you want to exclude KoinInit.kt with real credentials
-# sharedUI/src/commonMain/kotlin/com/raremartial/aiac/di/KoinInit.kt
+# API Configuration - файл с секретами
+sharedUI/src/commonMain/kotlin/com/raremartial/aiac/di/Secrets.kt
 
 # Logs
 *.log
