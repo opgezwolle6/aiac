@@ -14,7 +14,8 @@ data class ChatMessage(
     val structuredData: StructuredResponse? = null,
     val solutionResults: List<SolutionResult> = emptyList(),
     val comparisonAnalysis: ComparisonAnalysis? = null,
-    val selectedMethods: List<SolutionMethod> = emptyList()
+    val selectedMethods: List<SolutionMethod> = emptyList(),
+    val tokenUsage: TokenUsage? = null
 )
 
 enum class MessageRole {

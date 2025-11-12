@@ -12,6 +12,7 @@ import com.raremartial.aiac.data.model.SolutionMethod
 import com.raremartial.aiac.data.model.SolutionResult
 import com.raremartial.aiac.data.model.StructuredResponse
 import com.raremartial.aiac.data.model.Temperature
+import com.raremartial.aiac.data.model.TokenUsage
 import com.raremartial.aiac.network.HuggingFaceApi
 import com.raremartial.aiac.network.YandexGPTApi
 import com.raremartial.aiac.network.models.CompletionOptions
@@ -74,6 +75,25 @@ class ChatRepositoryImpl(
     override val messages: Flow<List<ChatMessage>> = _messages.asStateFlow()
 
     companion object {
+        /**
+         * Максимальная длина текста для YandexGPT API (в символах)
+         * API принимает тексты длиной не более 500 000 символов
+         */
+        private const val MAX_TEXT_LENGTH = 500_000
+        
+        /**
+         * Максимальное количество входных токенов для YandexGPT API
+         * API принимает не более 32 768 входных токенов
+         */
+        private const val MAX_INPUT_TOKENS = 32_768
+        
+        /**
+         * Приблизительное количество символов на токен
+         * Для русского текста обычно 1 токен ≈ 3-4 символа
+         * Используем консервативное значение 3.5 для более точной оценки
+         */
+        private const val CHARS_PER_TOKEN = 3.5
+        
         /**
          * Минимальный JSON формат - используется когда выбрана температура
          * Содержит только формат ответа без дополнительных инструкций
@@ -452,6 +472,21 @@ class ChatRepositoryImpl(
     }
 
     /**
+     * Вычисляет общую длину текста всех сообщений в запросе
+     */
+    private fun calculateTotalTextLength(messages: List<Message>): Int {
+        return messages.sumOf { it.text.length }
+    }
+    
+    /**
+     * Приблизительно вычисляет количество токенов на основе длины текста
+     * Использует консервативную оценку для русского текста
+     */
+    private fun estimateTokens(textLength: Int): Int {
+        return (textLength / CHARS_PER_TOKEN).toInt()
+    }
+
+    /**
      * Отправляет сообщение с одним способом решения
      */
     private suspend fun sendMessageWithMethod(
@@ -477,6 +512,74 @@ class ChatRepositoryImpl(
         val networkMessages =
             listOf(Message(role = "system", text = systemPrompt)) + conversationHistory
 
+        // Проверяем общую длину текста перед отправкой
+        val totalLength = calculateTotalTextLength(networkMessages)
+        val estimatedTokens = estimateTokens(totalLength)
+        
+        if (totalLength > MAX_TEXT_LENGTH) {
+            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            val currentTextLength = text.length
+            val historyLength = totalLength - systemPrompt.length - currentTextLength
+            
+            return Result.failure(Exception(
+                buildString {
+                    appendLine("Превышен лимит длины текста")
+                    appendLine()
+                    appendLine("YandexGPT API принимает тексты длиной не более ${MAX_TEXT_LENGTH / 1000} 000 символов.")
+                    appendLine()
+                    appendLine("Текущая длина:")
+                    appendLine("• Ваше сообщение: ${String.format("%,d", currentTextLength)} символов")
+                    if (historyLength > 0) {
+                        appendLine("• История разговора: ${String.format("%,d", historyLength)} символов")
+                    }
+                    appendLine("• Системный промпт: ${String.format("%,d", systemPrompt.length)} символов")
+                    appendLine("• Всего: ${String.format("%,d", totalLength)} символов (~${String.format("%,d", estimatedTokens)} токенов)")
+                    appendLine()
+                    appendLine("Рекомендации:")
+                    appendLine("• Разбейте текст на несколько частей")
+                    if (historyLength > 0) {
+                        appendLine("• Очистите историю разговора (она занимает ${String.format("%,d", historyLength)} символов)")
+                    }
+                    appendLine("• Отправьте только необходимую часть текста")
+                }
+            ))
+        }
+        
+        // Проверяем количество токенов перед отправкой
+        if (estimatedTokens > MAX_INPUT_TOKENS) {
+            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            val currentTextLength = text.length
+            val historyLength = totalLength - systemPrompt.length - currentTextLength
+            val currentTextTokens = estimateTokens(currentTextLength)
+            val historyTokens = estimateTokens(historyLength)
+            val systemPromptTokens = estimateTokens(systemPrompt.length)
+            
+            return Result.failure(Exception(
+                buildString {
+                    appendLine("Превышен лимит количества токенов")
+                    appendLine()
+                    appendLine("YandexGPT API принимает не более ${String.format("%,d", MAX_INPUT_TOKENS)} входных токенов.")
+                    appendLine()
+                    appendLine("Текущее количество токенов (приблизительно):")
+                    appendLine("• Ваше сообщение: ~${String.format("%,d", currentTextTokens)} токенов (${String.format("%,d", currentTextLength)} символов)")
+                    if (historyTokens > 0) {
+                        appendLine("• История разговора: ~${String.format("%,d", historyTokens)} токенов (${String.format("%,d", historyLength)} символов)")
+                    }
+                    appendLine("• Системный промпт: ~${String.format("%,d", systemPromptTokens)} токенов (${String.format("%,d", systemPrompt.length)} символов)")
+                    appendLine("• Всего: ~${String.format("%,d", estimatedTokens)} токенов (${String.format("%,d", totalLength)} символов)")
+                    appendLine()
+                    appendLine("Рекомендации:")
+                    appendLine("• Разбейте текст на несколько частей")
+                    if (historyTokens > 0) {
+                        appendLine("• Очистите историю разговора (она занимает ~${String.format("%,d", historyTokens)} токенов)")
+                    }
+                    appendLine("• Отправьте только необходимую часть текста")
+                    appendLine()
+                    appendLine("Примечание: 1 токен ≈ 3-4 символа для русского текста")
+                }
+            ))
+        }
+
         val temperatureValue = getTemperatureValue(temperature)
         val request = YandexGPTRequest(
             modelUri = "",
@@ -484,7 +587,7 @@ class ChatRepositoryImpl(
             messages = networkMessages
         )
 
-        logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name})" }
+        logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name}), totalLength=$totalLength, estimatedTokens=$estimatedTokens" }
 
         val result = api.sendMessage(request)
 
@@ -512,13 +615,16 @@ class ChatRepositoryImpl(
                     return Result.failure(Exception("Failed to parse structured response from YandexGPT"))
                 }
 
+                val tokenUsage = TokenUsage.fromUsage(response.result?.usage)
+
                 val assistantMessage = ChatMessage(
                     id = pendingMessage.id,
                     content = structuredResponse.answer,
                     role = MessageRole.ASSISTANT,
                     timestamp = currentTime(),
                     isPending = false,
-                    structuredData = structuredResponse.copy(solutionMethod = method)
+                    structuredData = structuredResponse.copy(solutionMethod = method),
+                    tokenUsage = tokenUsage
                 )
 
                 _messages.value = _messages.value
@@ -557,7 +663,76 @@ class ChatRepositoryImpl(
             .filter { !it.isPending && it.id != pendingMessage.id }
             .map { ChatMessageMapper.toNetwork(it) }
 
-        val solutionResults = coroutineScope {
+        // Проверяем длину текста для всех методов
+        val systemPrompts = methods.map { getSystemPrompt(it, temperature) }
+        val maxSystemPromptLength = systemPrompts.maxOfOrNull { it.length } ?: 0
+        val historyLength = calculateTotalTextLength(conversationHistory)
+        val totalLength = historyLength + maxSystemPromptLength + text.length
+        val estimatedTokens = estimateTokens(totalLength)
+        
+        if (totalLength > MAX_TEXT_LENGTH) {
+            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            val currentTextLength = text.length
+            
+            return Result.failure(Exception(
+                buildString {
+                    appendLine("Превышен лимит длины текста")
+                    appendLine()
+                    appendLine("YandexGPT API принимает тексты длиной не более ${MAX_TEXT_LENGTH / 1000} 000 символов.")
+                    appendLine()
+                    appendLine("Текущая длина:")
+                    appendLine("• Ваше сообщение: ${String.format("%,d", currentTextLength)} символов")
+                    if (historyLength > 0) {
+                        appendLine("• История разговора: ${String.format("%,d", historyLength)} символов")
+                    }
+                    appendLine("• Системные промпты: ~${String.format("%,d", maxSystemPromptLength)} символов")
+                    appendLine("• Всего: ${String.format("%,d", totalLength)} символов (~${String.format("%,d", estimatedTokens)} токенов)")
+                    appendLine()
+                    appendLine("Рекомендации:")
+                    appendLine("• Разбейте текст на несколько частей")
+                    if (historyLength > 0) {
+                        appendLine("• Очистите историю разговора (она занимает ${String.format("%,d", historyLength)} символов)")
+                    }
+                    appendLine("• Отправьте только необходимую часть текста")
+                }
+            ))
+        }
+        
+        // Проверяем количество токенов перед отправкой
+        if (estimatedTokens > MAX_INPUT_TOKENS) {
+            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            val currentTextLength = text.length
+            val currentTextTokens = estimateTokens(currentTextLength)
+            val historyTokens = estimateTokens(historyLength)
+            val systemPromptTokens = estimateTokens(maxSystemPromptLength)
+            
+            return Result.failure(Exception(
+                buildString {
+                    appendLine("Превышен лимит количества токенов")
+                    appendLine()
+                    appendLine("YandexGPT API принимает не более ${String.format("%,d", MAX_INPUT_TOKENS)} входных токенов.")
+                    appendLine()
+                    appendLine("Текущее количество токенов (приблизительно):")
+                    appendLine("• Ваше сообщение: ~${String.format("%,d", currentTextTokens)} токенов (${String.format("%,d", currentTextLength)} символов)")
+                    if (historyTokens > 0) {
+                        appendLine("• История разговора: ~${String.format("%,d", historyTokens)} токенов (${String.format("%,d", historyLength)} символов)")
+                    }
+                    appendLine("• Системные промпты: ~${String.format("%,d", systemPromptTokens)} токенов (~${String.format("%,d", maxSystemPromptLength)} символов)")
+                    appendLine("• Всего: ~${String.format("%,d", estimatedTokens)} токенов (${String.format("%,d", totalLength)} символов)")
+                    appendLine()
+                    appendLine("Рекомендации:")
+                    appendLine("• Разбейте текст на несколько частей")
+                    if (historyTokens > 0) {
+                        appendLine("• Очистите историю разговора (она занимает ~${String.format("%,d", historyTokens)} токенов)")
+                    }
+                    appendLine("• Отправьте только необходимую часть текста")
+                    appendLine()
+                    appendLine("Примечание: 1 токен ≈ 3-4 символа для русского текста")
+                }
+            ))
+        }
+
+        val solutionResultsWithUsage = coroutineScope {
             methods.map { method ->
                 async {
                     val systemPrompt = getSystemPrompt(method, temperature)
@@ -571,7 +746,9 @@ class ChatRepositoryImpl(
                         messages = networkMessages
                     )
 
-                    logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name})" }
+                    val requestTotalLength = calculateTotalTextLength(networkMessages)
+                    val requestEstimatedTokens = estimateTokens(requestTotalLength)
+                    logger.d { "Sending message with method $method: text=${text.take(50)}..., temperature=$temperatureValue (${temperature.name}), totalLength=$requestTotalLength, estimatedTokens=$requestEstimatedTokens" }
 
                     val result = api.sendMessage(request)
 
@@ -593,12 +770,16 @@ class ChatRepositoryImpl(
                                     parseStructuredResponse(responseMessage.text)
 
                                 if (structuredResponse != null) {
-                                    SolutionResult(
-                                        method = method,
-                                        title = structuredResponse.title,
-                                        answer = structuredResponse.answer,
-                                        uncertainty_value = structuredResponse.uncertainty_value,
-                                        questions = structuredResponse.questions
+                                    val tokenUsage = TokenUsage.fromUsage(response.result?.usage)
+                                    Pair(
+                                        SolutionResult(
+                                            method = method,
+                                            title = structuredResponse.title,
+                                            answer = structuredResponse.answer,
+                                            uncertainty_value = structuredResponse.uncertainty_value,
+                                            questions = structuredResponse.questions
+                                        ),
+                                        tokenUsage
                                     )
                                 } else {
                                     null
@@ -615,6 +796,17 @@ class ChatRepositoryImpl(
                 }
             }.awaitAll().filterNotNull()
         }
+
+        val solutionResults = solutionResultsWithUsage.map { it.first }
+        val totalTokenUsage = solutionResultsWithUsage
+            .map { it.second }
+            .fold(TokenUsage()) { acc, usage ->
+                TokenUsage(
+                    inputTokens = acc.inputTokens + usage.inputTokens,
+                    outputTokens = acc.outputTokens + usage.outputTokens,
+                    totalTokens = acc.totalTokens + usage.totalTokens
+                )
+            }
 
         if (solutionResults.isEmpty()) {
             _messages.value = _messages.value.filter { it.id != pendingMessage.id }
@@ -663,7 +855,8 @@ class ChatRepositoryImpl(
             isPending = false,
             solutionResults = sortedResults,
             comparisonAnalysis = comparisonAnalysis,
-            selectedMethods = methods.toList()
+            selectedMethods = methods.toList(),
+            tokenUsage = totalTokenUsage
         )
 
         _messages.value = _messages.value

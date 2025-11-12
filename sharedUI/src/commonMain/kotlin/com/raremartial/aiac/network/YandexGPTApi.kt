@@ -63,22 +63,55 @@ class YandexGPTApiImpl(
                 }
                 
                 val errorMessage = error?.message ?: "HTTP ${httpResponse.status.value}"
-                val enhancedMessage = if (errorMessage.contains("Permission", ignoreCase = true) || 
-                                          errorMessage.contains("denied", ignoreCase = true)) {
-                    buildString {
-                        appendLine(errorMessage)
-                        appendLine()
-                        appendLine("Для решения проблемы необходимо:")
-                        appendLine("1. Откройте консоль Yandex Cloud: https://console.cloud.yandex.ru/")
-                        appendLine("2. Перейдите в раздел 'Сервисные аккаунты'")
-                        appendLine("3. Найдите сервисный аккаунт, к которому привязан API-ключ")
-                        appendLine("4. Назначьте сервисному аккаунту роль: ai.languageModels.user")
-                        appendLine("5. Убедитесь, что сервисный аккаунт имеет доступ к папке: $folderId")
-                        appendLine()
-                        appendLine("Подробная инструкция: https://yandex.cloud/ru/docs/ai-studio/operations/get-api-key")
+                val enhancedMessage = when {
+                    errorMessage.contains("Permission", ignoreCase = true) || 
+                    errorMessage.contains("denied", ignoreCase = true) -> {
+                        buildString {
+                            appendLine(errorMessage)
+                            appendLine()
+                            appendLine("Для решения проблемы необходимо:")
+                            appendLine("1. Откройте консоль Yandex Cloud: https://console.cloud.yandex.ru/")
+                            appendLine("2. Перейдите в раздел 'Сервисные аккаунты'")
+                            appendLine("3. Найдите сервисный аккаунт, к которому привязан API-ключ")
+                            appendLine("4. Назначьте сервисному аккаунту роль: ai.languageModels.user")
+                            appendLine("5. Убедитесь, что сервисный аккаунт имеет доступ к папке: $folderId")
+                            appendLine()
+                            appendLine("Подробная инструкция: https://yandex.cloud/ru/docs/ai-studio/operations/get-api-key")
+                        }
                     }
-                } else {
-                    errorMessage
+                    errorMessage.contains("text length", ignoreCase = true) && 
+                    errorMessage.contains("outside the range", ignoreCase = true) -> {
+                        buildString {
+                            appendLine("Превышен лимит длины текста")
+                            appendLine()
+                            appendLine("YandexGPT API принимает тексты длиной не более 500 000 символов.")
+                            appendLine()
+                            appendLine("Ваш текст слишком длинный. Рекомендации:")
+                            appendLine("• Разбейте текст на несколько частей")
+                            appendLine("• Сократите историю разговора (очистите чат)")
+                            appendLine("• Отправьте только необходимую часть текста")
+                            appendLine()
+                            appendLine("Техническая информация: $errorMessage")
+                        }
+                    }
+                    errorMessage.contains("number of input tokens", ignoreCase = true) && 
+                    errorMessage.contains("must be no more than", ignoreCase = true) -> {
+                        buildString {
+                            appendLine("Превышен лимит количества токенов")
+                            appendLine()
+                            appendLine("YandexGPT API принимает не более 32 768 входных токенов.")
+                            appendLine()
+                            appendLine("Ваш запрос содержит слишком много токенов. Рекомендации:")
+                            appendLine("• Разбейте текст на несколько частей")
+                            appendLine("• Сократите историю разговора (очистите чат)")
+                            appendLine("• Отправьте только необходимую часть текста")
+                            appendLine()
+                            appendLine("Примечание: 1 токен ≈ 3-4 символа для русского текста")
+                            appendLine()
+                            appendLine("Техническая информация: $errorMessage")
+                        }
+                    }
+                    else -> errorMessage
                 }
                 
                 return Result.failure(Exception(enhancedMessage))

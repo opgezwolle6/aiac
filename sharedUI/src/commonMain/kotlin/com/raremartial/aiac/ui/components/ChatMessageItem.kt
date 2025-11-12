@@ -139,12 +139,28 @@ fun ChatMessageItem(
                                         }
                                     }
                                 }
+                                
+                                // Статистика токенов для множественных способов
+                                currentMessage.tokenUsage?.let { usage ->
+                                    if (usage.totalTokens > 0) {
+                                        Divider(
+                                            modifier = Modifier.padding(vertical = 4.dp),
+                                            color = contentColor.copy(alpha = 0.3f)
+                                        )
+                                        Text(
+                                            text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = contentColor.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
                             }
                         }
                         // Если есть структурированные данные (один способ)
                         currentMessage.structuredData != null && !isUser -> {
                             Column(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (currentMessage.structuredData.title.isNotBlank()) {
                                     Text(
@@ -160,25 +176,17 @@ fun ChatMessageItem(
                                     color = contentColor,
                                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                                 )
-                            }
-                        }
-                        // Пользовательские сообщения с выбранными способами
-                        isUser && currentMessage.selectedMethods.isNotEmpty() -> {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = currentMessage.content,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = contentColor,
-                                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                                )
-                                Text(
-                                    text = "Способы: ${currentMessage.selectedMethods.joinToString(", ") { getMethodDisplayName(it) }}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = contentColor.copy(alpha = 0.7f)
-                                )
+                                // Статистика токенов
+                                currentMessage.tokenUsage?.let { usage ->
+                                    if (usage.totalTokens > 0) {
+                                        Text(
+                                            text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = contentColor.copy(alpha = 0.6f),
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                         // Обычный контент

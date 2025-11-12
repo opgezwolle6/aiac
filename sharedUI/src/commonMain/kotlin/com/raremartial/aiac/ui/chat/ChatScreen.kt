@@ -41,10 +41,6 @@ import com.raremartial.aiac.theme.LocalThemeIsDark
 import com.raremartial.aiac.ui.components.ChatInput
 import com.raremartial.aiac.ui.components.ChatMessageItem
 import com.raremartial.aiac.ui.components.ErrorSnackbar
-import com.raremartial.aiac.ui.components.ModelComparisonResultCard
-import com.raremartial.aiac.ui.components.ModelSelector
-import com.raremartial.aiac.ui.components.SolutionMethodSelector
-import com.raremartial.aiac.ui.components.TemperatureSelector
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,11 +54,11 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val isDark by LocalThemeIsDark.current
 
-    LaunchedEffect(state.messages.size, state.modelComparisonResult) {
-        if (state.messages.isNotEmpty() || state.modelComparisonResult != null) {
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
             coroutineScope.launch {
                 // Скроллим к последнему элементу
-                val itemCount = state.messages.size + if (state.modelComparisonResult != null) 1 else 0
+                val itemCount = state.messages.size
                 val targetIndex = itemCount - 1
                 if (targetIndex >= 0 && itemCount > 0) {
                     listState.animateScrollToItem(
@@ -149,18 +145,8 @@ fun ChatScreen(
                 ) { message ->
                     ChatMessageItem(message = message)
                 }
-
-                // Отображение результата сравнения моделей
-                if (state.modelComparisonResult != null) {
-                    item {
-                        ModelComparisonResultCard(
-                            comparisonResult = state.modelComparisonResult!!,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
                 
-                if (state.messages.isEmpty() && state.modelComparisonResult == null) {
+                if (state.messages.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -198,94 +184,6 @@ fun ChatScreen(
                         )
                     )
             ) {
-                    // Селекторы формата ответа и температуры временно скрыты
-                    // if (!state.isComparingModels && state.modelComparisonResult == null) {
-                    //     SolutionMethodSelector(
-                    //         selectedMethods = state.selectedMethods,
-                    //         onMethodToggle = { method ->
-                    //             viewModel.handleAction(ChatAction.ToggleSolutionMethod(method))
-                    //         }
-                    //     )
-                    //     
-                    //     TemperatureSelector(
-                    //         selectedTemperature = state.selectedTemperature,
-                    //         onTemperatureSelected = { temperature ->
-                    //             viewModel.handleAction(ChatAction.SetTemperature(temperature))
-                    //         }
-                    //     )
-                    // }
-
-                    // Селекторы моделей для сравнения (компактное расположение)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ModelSelector(
-                            label = "Модель 1",
-                            selectedModel = state.firstModel,
-                            onModelSelected = { model ->
-                                viewModel.handleAction(ChatAction.SetFirstModel(model))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        ModelSelector(
-                            label = "Модель 2",
-                            selectedModel = state.secondModel,
-                            onModelSelected = { model ->
-                                viewModel.handleAction(ChatAction.SetSecondModel(model))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        ModelSelector(
-                            label = "Модель 3",
-                            selectedModel = state.thirdModel,
-                            onModelSelected = { model ->
-                                viewModel.handleAction(ChatAction.SetThirdModel(model))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    // Кнопка для сравнения моделей
-                    Button(
-                        onClick = {
-                            if (state.inputText.isNotEmpty()) {
-                                viewModel.handleAction(
-                                    ChatAction.CompareModels(
-                                        text = state.inputText,
-                                        firstModel = state.firstModel,
-                                        secondModel = state.secondModel,
-                                        thirdModel = state.thirdModel,
-                                        temperature = state.selectedTemperature
-                                    )
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        enabled = !state.isLoading && state.inputText.isNotEmpty()
-                    ) {
-                        if (state.isComparingModels) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Text("Сравниваю модели...")
-                            }
-                        } else {
-                            Text("Сравнить модели")
-                        }
-                    }
-                    
                 ChatInput(
                     text = state.inputText,
                     onTextChange = { viewModel.handleAction(ChatAction.UpdateInputText(it)) },
