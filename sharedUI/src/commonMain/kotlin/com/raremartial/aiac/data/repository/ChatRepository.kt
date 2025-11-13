@@ -95,6 +95,12 @@ class ChatRepositoryImpl(
         private const val CHARS_PER_TOKEN = 3.5
         
         /**
+         * Количество сообщений в истории перед созданием summary
+         * Каждые MESSAGES_BEFORE_COMPRESSION сообщений будут сжаты в summary
+         */
+        private const val MESSAGES_BEFORE_COMPRESSION = 10
+        
+        /**
          * Минимальный JSON формат - используется когда выбрана температура
          * Содержит только формат ответа без дополнительных инструкций
          */
@@ -461,6 +467,9 @@ class ChatRepositoryImpl(
 
         _messages.value = _messages.value + userMessage
 
+        // Проверяем, нужно ли сжать историю
+        compressHistoryIfNeeded(temperature)
+
         // Если выбран только один способ, используем старую логику
         if (methods.size == 1) {
             val method = methods.first()
@@ -504,8 +513,7 @@ class ChatRepositoryImpl(
         )
         _messages.value = _messages.value + pendingMessage
 
-        val conversationHistory = _messages.value
-            .filter { !it.isPending && it.id != pendingMessage.id }
+        val conversationHistory = getCompressedHistory(pendingMessage.id)
             .map { ChatMessageMapper.toNetwork(it) }
 
         val systemPrompt = getSystemPrompt(method, temperature)
@@ -659,8 +667,7 @@ class ChatRepositoryImpl(
         _messages.value = _messages.value + pendingMessage
 
         // Отправляем запросы для каждого способа параллельно
-        val conversationHistory = _messages.value
-            .filter { !it.isPending && it.id != pendingMessage.id }
+        val conversationHistory = getCompressedHistory(pendingMessage.id)
             .map { ChatMessageMapper.toNetwork(it) }
 
         // Проверяем длину текста для всех методов
@@ -1552,6 +1559,146 @@ class ChatRepositoryImpl(
             logger.e(e) { "Failed to compare models: ${e.message}" }
             Result.failure(e)
         }
+    }
+
+    /**
+     * Получает сжатую историю диалога для отправки в API
+     * Исключает pending сообщения и возвращает историю с учетом summary
+     */
+    private fun getCompressedHistory(excludeId: String? = null): List<ChatMessage> {
+        return _messages.value
+            .filter { !it.isPending && it.id != excludeId }
+    }
+
+    /**
+     * Проверяет, нужно ли сжать историю, и выполняет сжатие при необходимости
+     * Сжимает каждые MESSAGES_BEFORE_COMPRESSION сообщений (не считая summary)
+     */
+    private suspend fun compressHistoryIfNeeded(temperature: Temperature) {
+        val allMessages = _messages.value.filter { !it.isPending }
+        val nonSummaryMessages = allMessages.filter { !it.isSummary }
+        
+        // Если сообщений меньше порога, сжатие не требуется
+        if (nonSummaryMessages.size < MESSAGES_BEFORE_COMPRESSION) {
+            return
+        }
+        
+        // Находим последний summary в истории
+        val lastSummaryIndex = allMessages.indexOfLast { it.isSummary }
+        
+        // Определяем сообщения, которые нужно сжать
+        val messagesToCompress = if (lastSummaryIndex >= 0) {
+            // Если есть summary, берем сообщения после него
+            val messagesAfterSummary = allMessages.subList(
+                lastSummaryIndex + 1,
+                allMessages.size
+            ).filter { !it.isSummary }
+            
+            if (messagesAfterSummary.size >= MESSAGES_BEFORE_COMPRESSION) {
+                messagesAfterSummary.take(MESSAGES_BEFORE_COMPRESSION)
+            } else {
+                emptyList()
+            }
+        } else {
+            // Если summary нет, берем первые MESSAGES_BEFORE_COMPRESSION сообщений
+            nonSummaryMessages.take(MESSAGES_BEFORE_COMPRESSION)
+        }
+        
+        // Если накопилось достаточно сообщений, создаем summary
+        if (messagesToCompress.size >= MESSAGES_BEFORE_COMPRESSION) {
+            createSummary(messagesToCompress, temperature)
+        }
+    }
+
+    /**
+     * Создает summary для указанных сообщений через YandexGPT API
+     * Заменяет оригинальные сообщения на summary сообщение
+     */
+    private suspend fun createSummary(messagesToCompress: List<ChatMessage>, temperature: Temperature) {
+        if (messagesToCompress.isEmpty()) return
+        
+        logger.d { "Creating summary for ${messagesToCompress.size} messages" }
+        
+        // Формируем текст для summary
+        val conversationText = messagesToCompress.joinToString("\n") { message ->
+            val role = if (message.role == MessageRole.USER) "Пользователь" else "Ассистент"
+            "$role: ${message.content}"
+        }
+        
+        val summaryPrompt = """
+            Создай краткое резюме следующего диалога, сохраняя ключевые моменты, важные детали и контекст для продолжения разговора.
+            Резюме должно быть на русском языке и содержать только существенную информацию.
+            
+            Диалог:
+            $conversationText
+            
+            Резюме:
+        """.trimIndent()
+        
+        // Создаем запрос для создания summary
+        val systemPrompt = "Ты — помощник, который создает краткие и информативные резюме диалогов. Твоя задача — сохранить ключевые моменты и контекст для продолжения разговора."
+        val request = YandexGPTRequest(
+            modelUri = "",
+            completionOptions = CompletionOptions(
+                temperature = getTemperatureValue(temperature),
+                maxTokens = "1000"
+            ),
+            messages = listOf(
+                Message(role = "system", text = systemPrompt),
+                Message(role = "user", text = summaryPrompt)
+            )
+        )
+        
+        val result = api.sendMessage(request)
+        
+        result.fold(
+            onSuccess = { response ->
+                val summaryText = response.result?.alternatives?.firstOrNull()?.message?.text
+                    ?: "Не удалось создать резюме"
+                
+                logger.d { "Summary created successfully: ${summaryText.take(100)}..." }
+                
+                // Создаем summary сообщение
+                val summaryMessage = ChatMessage(
+                    id = ChatMessageMapper.generateId(),
+                    content = summaryText,
+                    role = MessageRole.ASSISTANT,
+                    timestamp = currentTime(),
+                    isSummary = true
+                )
+                
+                // Заменяем сжатые сообщения на summary, сохраняя порядок
+                val messageIdsToRemove = messagesToCompress.map { it.id }.toSet()
+                val updatedMessages = mutableListOf<ChatMessage>()
+                
+                // Проходим по всем сообщениям и заменяем сжатые на summary
+                var summaryInserted = false
+                for (message in _messages.value) {
+                    if (message.id in messageIdsToRemove) {
+                        // Пропускаем сжатые сообщения и вставляем summary один раз
+                        if (!summaryInserted) {
+                            updatedMessages.add(summaryMessage)
+                            summaryInserted = true
+                        }
+                    } else {
+                        updatedMessages.add(message)
+                    }
+                }
+                
+                // Если summary не был вставлен (все сжатые сообщения были в конце), добавляем его в конец
+                if (!summaryInserted) {
+                    updatedMessages.add(summaryMessage)
+                }
+                
+                _messages.value = updatedMessages
+                
+                logger.d { "History compressed: ${messagesToCompress.size} messages replaced with summary" }
+            },
+            onFailure = { exception ->
+                logger.e(exception) { "Failed to create summary: ${exception.message}" }
+                // В случае ошибки не сжимаем историю, продолжаем работу с полной историей
+            }
+        )
     }
 
     override suspend fun clearHistory() {

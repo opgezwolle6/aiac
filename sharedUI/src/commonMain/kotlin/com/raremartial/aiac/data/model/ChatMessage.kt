@@ -15,7 +15,11 @@ data class ChatMessage(
     val solutionResults: List<SolutionResult> = emptyList(),
     val comparisonAnalysis: ComparisonAnalysis? = null,
     val selectedMethods: List<SolutionMethod> = emptyList(),
-    val tokenUsage: TokenUsage? = null
+    val tokenUsage: TokenUsage? = null,
+    /**
+     * Флаг, указывающий, что это сообщение является summary (сжатием) предыдущих сообщений
+     */
+    val isSummary: Boolean = false
 )
 
 enum class MessageRole {

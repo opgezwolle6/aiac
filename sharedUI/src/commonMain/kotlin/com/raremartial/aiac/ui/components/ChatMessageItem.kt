@@ -191,12 +191,26 @@ fun ChatMessageItem(
                         }
                         // Обычный контент
                         else -> {
-                    Text(
-                        text = currentMessage.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = contentColor,
-                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                    )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                // Показываем метку для summary сообщений
+                                if (currentMessage.isSummary) {
+                                    Text(
+                                        text = "📋 Резюме предыдущих сообщений",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = contentColor.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
+                                Text(
+                                    text = currentMessage.content,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = contentColor,
+                                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                                )
+                            }
                 }
             }
         }

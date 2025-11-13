@@ -41,6 +41,7 @@ import com.raremartial.aiac.theme.LocalThemeIsDark
 import com.raremartial.aiac.ui.components.ChatInput
 import com.raremartial.aiac.ui.components.ChatMessageItem
 import com.raremartial.aiac.ui.components.ErrorSnackbar
+import com.raremartial.aiac.ui.components.TokenStatisticsCard
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,6 +134,9 @@ fun ChatScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             Column {
+            // Статистика токенов
+            TokenStatisticsCard(messages = state.messages)
+            
             LazyColumn(
                 state = listState,
                     modifier = Modifier.weight(1f),
