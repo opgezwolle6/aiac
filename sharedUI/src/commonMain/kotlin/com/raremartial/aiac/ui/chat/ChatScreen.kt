@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Button
@@ -106,6 +107,25 @@ fun ChatScreen(
                     ) 
                 },
                 actions = {
+                    // Кнопка очистки истории
+                    IconButton(
+                        onClick = {
+                            viewModel.handleAction(ChatAction.ClearHistory)
+                        },
+                        enabled = state.messages.isNotEmpty() && !state.isLoading
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Очистить историю",
+                            tint = if (state.messages.isNotEmpty() && !state.isLoading) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            }
+                        )
+                    }
+                    
+                    // Кнопка переключения темы
                     val themeState = LocalThemeIsDark.current
                     IconButton(
                         onClick = {

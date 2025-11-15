@@ -1,0 +1,89 @@
+-- Таблица для хранения сообщений чата
+CREATE TABLE chat_message (
+    id TEXT NOT NULL PRIMARY KEY,
+    content TEXT NOT NULL,
+    role TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    is_pending INTEGER NOT NULL DEFAULT 0,
+    structured_data TEXT,
+    solution_results TEXT,
+    comparison_analysis TEXT,
+    selected_methods TEXT,
+    token_usage TEXT,
+    is_summary INTEGER NOT NULL DEFAULT 0
+);
+
+-- Индекс для быстрого поиска по timestamp (для сортировки)
+CREATE INDEX chat_message_timestamp_index ON chat_message(timestamp);
+
+-- Запрос для получения всех сообщений, отсортированных по timestamp
+selectAll:
+SELECT *
+FROM chat_message
+ORDER BY timestamp ASC;
+
+-- Запрос для получения сообщения по ID
+selectById:
+SELECT *
+FROM chat_message
+WHERE id = ?;
+
+-- Запрос для вставки сообщения
+insertMessage:
+INSERT INTO chat_message (
+    id,
+    content,
+    role,
+    timestamp,
+    is_pending,
+    structured_data,
+    solution_results,
+    comparison_analysis,
+    selected_methods,
+    token_usage,
+    is_summary
+)
+VALUES (
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?,
+    ?
+);
+
+-- Запрос для обновления сообщения
+updateMessage:
+UPDATE chat_message
+SET
+    content = ?,
+    role = ?,
+    timestamp = ?,
+    is_pending = ?,
+    structured_data = ?,
+    solution_results = ?,
+    comparison_analysis = ?,
+    selected_methods = ?,
+    token_usage = ?,
+    is_summary = ?
+WHERE id = ?;
+
+-- Запрос для удаления сообщения
+deleteMessage:
+DELETE FROM chat_message
+WHERE id = ?;
+
+-- Запрос для удаления всех сообщений
+deleteAll:
+DELETE FROM chat_message;
+
+-- Запрос для получения количества сообщений
+countMessages:
+SELECT COUNT(*) AS count
+FROM chat_message;
+

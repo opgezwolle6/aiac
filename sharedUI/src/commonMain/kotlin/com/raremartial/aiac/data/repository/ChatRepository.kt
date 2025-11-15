@@ -25,8 +25,10 @@ import kotlinx.datetime.Clock
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
+import com.raremartial.aiac.database.ChatMessageDao
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -61,7 +63,8 @@ interface ChatRepository {
 class ChatRepositoryImpl(
     private val api: YandexGPTApi,
     private val huggingFaceApi: HuggingFaceApi,
-    private val folderId: String
+    private val folderId: String,
+    private val messageDao: ChatMessageDao
 ) : ChatRepository {
 
     private val logger = Logger.withTag("ChatRepository")
@@ -71,8 +74,42 @@ class ChatRepositoryImpl(
         prettyPrint = true
     }
 
-    private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    override val messages: Flow<List<ChatMessage>> = _messages.asStateFlow()
+    // Используем Flow для получения сообщений из БД
+    // Пока используем простой polling, в будущем можно добавить более эффективный механизм
+    override val messages: Flow<List<ChatMessage>> = flow {
+        while (true) {
+            emit(messageDao.getAllMessages())
+            kotlinx.coroutines.delay(1000) // Обновляем каждую секунду
+        }
+    }.flowOn(Dispatchers.Default)
+
+    /**
+     * Получить все сообщения из БД
+     */
+    private suspend fun getAllMessages(): List<ChatMessage> {
+        return messageDao.getAllMessages()
+    }
+
+    /**
+     * Сохранить сообщение в БД
+     */
+    private suspend fun saveMessage(message: ChatMessage) {
+        messageDao.insertMessage(message)
+    }
+
+    /**
+     * Обновить сообщение в БД
+     */
+    private suspend fun updateMessage(message: ChatMessage) {
+        messageDao.updateMessage(message)
+    }
+
+    /**
+     * Удалить сообщение из БД
+     */
+    private suspend fun deleteMessage(id: String) {
+        messageDao.deleteMessage(id)
+    }
 
     companion object {
         /**
@@ -465,7 +502,7 @@ class ChatRepositoryImpl(
             selectedMethods = methods.toList()
         )
 
-        _messages.value = _messages.value + userMessage
+        saveMessage(userMessage)
 
         // Проверяем, нужно ли сжать историю
         compressHistoryIfNeeded(temperature)
@@ -511,7 +548,7 @@ class ChatRepositoryImpl(
             timestamp = currentTime(),
             isPending = true
         )
-        _messages.value = _messages.value + pendingMessage
+        saveMessage(pendingMessage)
 
         val conversationHistory = getCompressedHistory(pendingMessage.id)
             .map { ChatMessageMapper.toNetwork(it) }
@@ -525,7 +562,7 @@ class ChatRepositoryImpl(
         val estimatedTokens = estimateTokens(totalLength)
         
         if (totalLength > MAX_TEXT_LENGTH) {
-            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            deleteMessage(pendingMessage.id)
             val currentTextLength = text.length
             val historyLength = totalLength - systemPrompt.length - currentTextLength
             
@@ -555,7 +592,7 @@ class ChatRepositoryImpl(
         
         // Проверяем количество токенов перед отправкой
         if (estimatedTokens > MAX_INPUT_TOKENS) {
-            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            deleteMessage(pendingMessage.id)
             val currentTextLength = text.length
             val historyLength = totalLength - systemPrompt.length - currentTextLength
             val currentTextTokens = estimateTokens(currentTextLength)
@@ -604,7 +641,7 @@ class ChatRepositoryImpl(
                 val responseMessage = response.result?.alternatives?.firstOrNull()?.message
 
                 if (responseMessage == null) {
-                    _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+                    deleteMessage(pendingMessage.id)
                     return Result.failure(Exception("Empty response from YandexGPT API"))
                 }
 
@@ -619,7 +656,7 @@ class ChatRepositoryImpl(
                 val structuredResponse = parseStructuredResponse(responseMessage.text)
 
                 if (structuredResponse == null) {
-                    _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+                    deleteMessage(pendingMessage.id)
                     return Result.failure(Exception("Failed to parse structured response from YandexGPT"))
                 }
 
@@ -635,14 +672,14 @@ class ChatRepositoryImpl(
                     tokenUsage = tokenUsage
                 )
 
-                _messages.value = _messages.value
-                    .filter { it.id != pendingMessage.id } + assistantMessage
+                deleteMessage(pendingMessage.id)
+                saveMessage(assistantMessage)
 
                 Result.success(assistantMessage)
             },
             onFailure = { exception ->
                 logger.e(exception) { "Failed to send message: ${exception.message}" }
-                _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+                deleteMessage(pendingMessage.id)
                 Result.failure(exception)
             }
         )
@@ -664,7 +701,7 @@ class ChatRepositoryImpl(
             timestamp = currentTime(),
             isPending = true
         )
-        _messages.value = _messages.value + pendingMessage
+        saveMessage(pendingMessage)
 
         // Отправляем запросы для каждого способа параллельно
         val conversationHistory = getCompressedHistory(pendingMessage.id)
@@ -678,7 +715,7 @@ class ChatRepositoryImpl(
         val estimatedTokens = estimateTokens(totalLength)
         
         if (totalLength > MAX_TEXT_LENGTH) {
-            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            deleteMessage(pendingMessage.id)
             val currentTextLength = text.length
             
             return Result.failure(Exception(
@@ -707,7 +744,7 @@ class ChatRepositoryImpl(
         
         // Проверяем количество токенов перед отправкой
         if (estimatedTokens > MAX_INPUT_TOKENS) {
-            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            deleteMessage(pendingMessage.id)
             val currentTextLength = text.length
             val currentTextTokens = estimateTokens(currentTextLength)
             val historyTokens = estimateTokens(historyLength)
@@ -816,7 +853,7 @@ class ChatRepositoryImpl(
             }
 
         if (solutionResults.isEmpty()) {
-            _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+            deleteMessage(pendingMessage.id)
             return Result.failure(Exception("Failed to get responses from any method"))
         }
 
@@ -866,8 +903,8 @@ class ChatRepositoryImpl(
             tokenUsage = totalTokenUsage
         )
 
-        _messages.value = _messages.value
-            .filter { it.id != pendingMessage.id } + assistantMessage
+        deleteMessage(pendingMessage.id)
+        saveMessage(assistantMessage)
 
         logger.d { "Message with ${sortedResults.size} methods successfully processed" }
         return Result.success(assistantMessage)
@@ -889,7 +926,7 @@ class ChatRepositoryImpl(
             }
         }
 
-        val conversationHistory = _messages.value
+        val conversationHistory = getAllMessages()
             .filter { !it.isPending }
             .map { ChatMessageMapper.toNetwork(it) }
 
@@ -1031,7 +1068,7 @@ class ChatRepositoryImpl(
 //
 //                if (responseMessage == null) {
 //                    logger.e { "Empty response from API: result=${response.result}, alternatives=${response.result?.alternatives}" }
-//                    _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+//                    deleteMessage(pendingMessage.id)
 //                    return Result.failure(Exception("Empty response from YandexGPT API"))
 //                }
 //
@@ -1051,7 +1088,7 @@ class ChatRepositoryImpl(
 //                            )
 //                        }"
 //                    }
-//                    _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+//                    deleteMessage(pendingMessage.id)
 //                    return Result.failure(Exception("Failed to parse structured response from YandexGPT"))
 //                }
 //
@@ -1091,7 +1128,7 @@ class ChatRepositoryImpl(
 //            },
 //            onFailure = { exception ->
 //                logger.e(exception) { "Failed to send message: ${exception.message}" }
-//                _messages.value = _messages.value.filter { it.id != pendingMessage.id }
+//                deleteMessage(pendingMessage.id)
 //                Result.failure(exception)
 //            }
 //        )
@@ -1565,8 +1602,8 @@ class ChatRepositoryImpl(
      * Получает сжатую историю диалога для отправки в API
      * Исключает pending сообщения и возвращает историю с учетом summary
      */
-    private fun getCompressedHistory(excludeId: String? = null): List<ChatMessage> {
-        return _messages.value
+    private suspend fun getCompressedHistory(excludeId: String? = null): List<ChatMessage> {
+        return getAllMessages()
             .filter { !it.isPending && it.id != excludeId }
     }
 
@@ -1575,7 +1612,7 @@ class ChatRepositoryImpl(
      * Сжимает каждые MESSAGES_BEFORE_COMPRESSION сообщений (не считая summary)
      */
     private suspend fun compressHistoryIfNeeded(temperature: Temperature) {
-        val allMessages = _messages.value.filter { !it.isPending }
+        val allMessages = getAllMessages().filter { !it.isPending }
         val nonSummaryMessages = allMessages.filter { !it.isSummary }
         
         // Если сообщений меньше порога, сжатие не требуется
@@ -1667,30 +1704,14 @@ class ChatRepositoryImpl(
                     isSummary = true
                 )
                 
-                // Заменяем сжатые сообщения на summary, сохраняя порядок
-                val messageIdsToRemove = messagesToCompress.map { it.id }.toSet()
-                val updatedMessages = mutableListOf<ChatMessage>()
-                
-                // Проходим по всем сообщениям и заменяем сжатые на summary
-                var summaryInserted = false
-                for (message in _messages.value) {
-                    if (message.id in messageIdsToRemove) {
-                        // Пропускаем сжатые сообщения и вставляем summary один раз
-                        if (!summaryInserted) {
-                            updatedMessages.add(summaryMessage)
-                            summaryInserted = true
-                        }
-                    } else {
-                        updatedMessages.add(message)
-                    }
+                // Удаляем сжатые сообщения и добавляем summary
+                val messageIdsToRemove = messagesToCompress.map { it.id }
+                messageIdsToRemove.forEach { id ->
+                    deleteMessage(id)
                 }
                 
-                // Если summary не был вставлен (все сжатые сообщения были в конце), добавляем его в конец
-                if (!summaryInserted) {
-                    updatedMessages.add(summaryMessage)
-                }
-                
-                _messages.value = updatedMessages
+                // Сохраняем summary сообщение
+                saveMessage(summaryMessage)
                 
                 logger.d { "History compressed: ${messagesToCompress.size} messages replaced with summary" }
             },
@@ -1702,7 +1723,6 @@ class ChatRepositoryImpl(
     }
 
     override suspend fun clearHistory() {
-        _messages.value = emptyList()
+        messageDao.deleteAll()
     }
 }
-

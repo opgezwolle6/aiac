@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.room)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.sqldelight)
 }
 
 kotlin {
@@ -55,6 +56,7 @@ kotlin {
             implementation(libs.room.runtime)
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
+            implementation(libs.sqldelight.runtime)
         }
 
         androidMain.dependencies {
@@ -62,16 +64,19 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.koin.android)
+            implementation(libs.sqldelight.android.driver)
         }
 
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.sqldelight.sqlite.driver)
         }
 
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            implementation(libs.sqldelight.native.driver)
         }
 
     }
@@ -86,6 +91,14 @@ kotlin {
 
 room {
     schemaDirectory("$projectDir/schemas")
+}
+
+sqldelight {
+    databases {
+        create("ChatDatabase") {
+            packageName.set("com.raremartial.aiac.database")
+        }
+    }
 }
 
 dependencies {
