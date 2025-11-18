@@ -28,3 +28,11 @@ object YandexConfig {
     const val FOLDER_ID = Secrets.YANDEX_FOLDER_ID
     const val HUGGINGFACE_API_KEY = Secrets.HUGGINGFACE_API_KEY
 }
+
+/**
+ * Конфигурация GitHub
+ * Использует значения из Secrets.kt
+ */
+object GitHubConfig {
+    const val PERSONAL_ACCESS_TOKEN = Secrets.GITHUB_PERSONAL_ACCESS_TOKEN
+}

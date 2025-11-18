@@ -49,6 +49,8 @@ fun ChatMessageItem(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
+                // Убираем ограничения по высоте, чтобы длинные сообщения могли прокручиваться
+                .wrapContentHeight(unbounded = true)
         ) {
             val maxMessageWidth = if (maxWidth > 600.dp) {
                 (maxWidth * 0.6f).coerceAtMost(800.dp)
@@ -63,6 +65,7 @@ fun ChatMessageItem(
             Box(
                 modifier = Modifier
                         .widthIn(max = maxMessageWidth)
+                        .wrapContentHeight(unbounded = true)
                         .animateContentSize(
                             animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -85,7 +88,9 @@ fun ChatMessageItem(
                         // Если есть множественные способы решения
                         currentMessage.solutionResults.isNotEmpty() && !isUser -> {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight(unbounded = true),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 // Отображаем каждый способ решения
@@ -159,7 +164,9 @@ fun ChatMessageItem(
                         // Если есть структурированные данные (один способ)
                         currentMessage.structuredData != null && !isUser -> {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight(unbounded = true),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (currentMessage.structuredData.title.isNotBlank()) {
@@ -192,7 +199,9 @@ fun ChatMessageItem(
                         // Обычный контент
                         else -> {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight(unbounded = true),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 // Показываем метку для summary сообщений
@@ -204,15 +213,15 @@ fun ChatMessageItem(
                                         modifier = Modifier.padding(bottom = 4.dp)
                                     )
                                 }
-                                Text(
-                                    text = currentMessage.content,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = contentColor,
-                                    lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
-                                )
-                            }
+                    Text(
+                        text = currentMessage.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                    )
                 }
             }
+        }
         }
                 }
             }
