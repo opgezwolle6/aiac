@@ -6,6 +6,7 @@ import com.raremartial.aiac.data.model.ModelInfo
 import com.raremartial.aiac.data.model.SolutionMethod
 import com.raremartial.aiac.data.model.Temperature
 import com.raremartial.aiac.data.model.HuggingFaceModels
+import com.raremartial.aiac.network.models.McpTool
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -18,6 +19,10 @@ data class ChatUiState(
     val secondModel: ModelInfo = if (HuggingFaceModels.POPULAR_MODELS.size > 1) HuggingFaceModels.POPULAR_MODELS[1] else if (HuggingFaceModels.POPULAR_MODELS.isNotEmpty()) HuggingFaceModels.POPULAR_MODELS[0] else ModelInfo("", ""),
     val thirdModel: ModelInfo = if (HuggingFaceModels.POPULAR_MODELS.size > 2) HuggingFaceModels.POPULAR_MODELS[2] else if (HuggingFaceModels.POPULAR_MODELS.size > 1) HuggingFaceModels.POPULAR_MODELS[1] else if (HuggingFaceModels.POPULAR_MODELS.isNotEmpty()) HuggingFaceModels.POPULAR_MODELS[0] else ModelInfo("", ""),
     val modelComparisonResult: ModelComparisonResult? = null,
-    val isComparingModels: Boolean = false
+    val isComparingModels: Boolean = false,
+    // MCP инструменты
+    val customMcpTools: List<McpTool> = emptyList(),
+    val isLoadingMcpTools: Boolean = false,
+    val mcpToolsError: String? = null
 )
 

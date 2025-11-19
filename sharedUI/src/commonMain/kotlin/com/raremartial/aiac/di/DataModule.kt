@@ -34,7 +34,12 @@ val dataModule = module {
             api = get(),
             huggingFaceApi = get(),
             folderId = YandexConfig.FOLDER_ID,
-            messageDao = get()
+            messageDao = get(),
+            customMcpApi = try {
+                get<com.raremartial.aiac.network.CustomMcpApi>()
+            } catch (e: Exception) {
+                null // CustomMcpApi может быть недоступен на некоторых платформах
+            }
         )
     }
 }

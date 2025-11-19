@@ -6,6 +6,10 @@ import com.raremartial.aiac.network.YandexGPTApi
 import com.raremartial.aiac.network.YandexGPTApiImpl
 import com.raremartial.aiac.network.GitHubMcpApi
 import com.raremartial.aiac.network.GitHubMcpApiImpl
+import com.raremartial.aiac.network.CustomMcpApi
+import com.raremartial.aiac.network.CustomMcpApiImpl
+import com.raremartial.aiac.network.YandexTrackerApi
+import com.raremartial.aiac.network.YandexTrackerApiImpl
 import io.ktor.client.HttpClient
 import org.koin.dsl.module
 
@@ -42,6 +46,21 @@ val networkModule = module {
             // 3. "http://localhost:3000" - локальный сервер (рекомендуется для разработки)
             // 4. "https://your-mcp-server.com" - ваш собственный развернутый сервер
             baseUrl = "https://api.githubcopilot.com/mcp" // Пробуем публичный endpoint (может потребоваться OAuth)
+        )
+    }
+    
+    single<CustomMcpApi> {
+        CustomMcpApiImpl(
+            httpClient = get(),
+            baseUrl = "http://localhost:8080" // Локальный MCP сервер
+        )
+    }
+    
+    single<YandexTrackerApi> {
+        YandexTrackerApiImpl(
+            httpClient = get(),
+            iamToken = YandexTrackerConfig.IAM_TOKEN,
+            orgId = YandexTrackerConfig.ORG_ID
         )
     }
 }

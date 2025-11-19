@@ -10,7 +10,7 @@ import kotlinx.datetime.Instant
 @OptIn(kotlin.time.ExperimentalTime::class)
 object ChatMessageMapper {
     
-    fun toDomain(networkMessage: ResponseMessage, timestamp: Instant = currentTime()): ChatMessage {
+    fun toDomain(networkMessage: ResponseMessage, timestamp: kotlin.time.Instant = currentTime()): ChatMessage {
         return ChatMessage(
             id = generateId(),
             content = networkMessage.text,

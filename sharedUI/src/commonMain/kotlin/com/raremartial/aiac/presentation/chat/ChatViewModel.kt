@@ -1,12 +1,15 @@
 package com.raremartial.aiac.presentation.chat
 
 import com.raremartial.aiac.data.repository.ChatRepository
+import com.raremartial.aiac.network.CustomMcpApi
 import com.raremartial.aiac.presentation.BaseViewModel
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 
 class ChatViewModel(
-    private val repository: ChatRepository
+    private val repository: ChatRepository,
+    private val customMcpApi: CustomMcpApi? = null
 ) : BaseViewModel<ChatUiState, ChatEvent, ChatAction>(
     initialState = ChatUiState()
 ) {
@@ -15,6 +18,13 @@ class ChatViewModel(
 
     init {
         logger.d { "ChatViewModel initialized" }
+        
+        // Загружаем MCP инструменты при инициализации ViewModel (отдельно от потока сообщений)
+        withViewModelScope {
+            loadMcpTools()
+        }
+        
+        // Отдельный scope для потока сообщений
         withViewModelScope {
             repository.messages
                 .catch { e ->
@@ -25,6 +35,64 @@ class ChatViewModel(
                     logger.d { "Messages updated: count=${messages.size}" }
                     viewState = viewState.copy(messages = messages)
                 }
+        }
+    }
+    
+    private suspend fun loadMcpTools() {
+        if (customMcpApi == null) {
+            logger.d { "CustomMcpApi is not available, skipping MCP tools loading" }
+            return
+        }
+        
+        logger.d { "Loading MCP tools from http://localhost:8080..." }
+        viewState = viewState.copy(isLoadingMcpTools = true, mcpToolsError = null)
+        
+        // Начальная задержка, чтобы дать серверу время запуститься
+        // Сервер запускается в McpServerModule при инициализации Koin
+        delay(2000L) // Увеличена задержка до 2 секунд
+        
+        var retryCount = 0
+        val maxRetries = 10
+        val retryDelayMs = 500L
+        
+        while (retryCount < maxRetries) {
+            if (retryCount > 0) {
+                // Задержка перед повторной попыткой (экспоненциальная)
+                delay(retryDelayMs * retryCount)
+            }
+            
+            logger.d { "Attempting to load MCP tools (attempt ${retryCount + 1}/$maxRetries)..." }
+            val result = customMcpApi.getTools()
+            result.fold(
+                onSuccess = { tools ->
+                    logger.i { "Successfully loaded ${tools.size} MCP tools: ${tools.map { it.name }}" }
+                    viewState = viewState.copy(
+                        customMcpTools = tools,
+                        isLoadingMcpTools = false,
+                        mcpToolsError = null
+                    )
+                    retryCount = maxRetries // Успешно, выходим из цикла
+                },
+                onFailure = { error ->
+                    retryCount++
+                    logger.w { "Failed to load MCP tools (attempt $retryCount/$maxRetries): ${error.message}" }
+                    logger.w { "Error type: ${error::class.simpleName}, cause: ${error.cause?.message}" }
+                    if (retryCount >= maxRetries) {
+                        // После всех попыток - логируем ошибку для диагностики
+                        logger.e { "Failed to load MCP tools after $maxRetries attempts. Last error: ${error.message}" }
+                        logger.e { "MCP Server may not be running. Check logs for 'McpServer' tag." }
+                        viewState = viewState.copy(
+                            isLoadingMcpTools = false,
+                            mcpToolsError = "MCP сервер недоступен. Проверьте, что сервер запущен на порту 8080."
+                        )
+                    }
+                }
+            )
+            
+            if (viewState.customMcpTools.isNotEmpty()) {
+                logger.d { "MCP tools loaded successfully, breaking retry loop" }
+                break // Успешно загрузили, выходим
+            }
         }
     }
 

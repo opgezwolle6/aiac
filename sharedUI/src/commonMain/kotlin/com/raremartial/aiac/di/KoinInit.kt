@@ -3,21 +3,7 @@ package com.raremartial.aiac.di
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
-fun initKoin() {
-    try {
-        stopKoin()
-    } catch (e: Exception) {
-    }
-    
-    startKoin {
-        modules(
-            appModule,
-            networkModule,
-            dataModule,
-            viewModelModule
-        )
-    }
-}
+expect fun initKoin()
 
 /**
  * Конфигурация Yandex Cloud
@@ -36,3 +22,14 @@ object YandexConfig {
 object GitHubConfig {
     const val PERSONAL_ACCESS_TOKEN = Secrets.GITHUB_PERSONAL_ACCESS_TOKEN
 }
+
+/**
+ * Конфигурация Яндекс.Трекера
+ * Использует значения из Secrets.kt
+ */
+object YandexTrackerConfig {
+    const val IAM_TOKEN = Secrets.YANDEX_TRACKER_IAM_TOKEN
+    const val ORG_ID = Secrets.YANDEX_TRACKER_ORG_ID
+    const val DEFAULT_QUEUE = Secrets.YANDEX_TRACKER_DEFAULT_QUEUE
+}
+

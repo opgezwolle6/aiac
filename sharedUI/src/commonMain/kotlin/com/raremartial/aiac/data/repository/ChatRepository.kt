@@ -15,6 +15,7 @@ import com.raremartial.aiac.data.model.Temperature
 import com.raremartial.aiac.data.model.TokenUsage
 import com.raremartial.aiac.network.HuggingFaceApi
 import com.raremartial.aiac.network.YandexGPTApi
+import com.raremartial.aiac.network.CustomMcpApi
 import com.raremartial.aiac.network.models.CompletionOptions
 import com.raremartial.aiac.network.models.HuggingFaceRequest
 import com.raremartial.aiac.network.models.Message
@@ -64,7 +65,8 @@ class ChatRepositoryImpl(
     private val api: YandexGPTApi,
     private val huggingFaceApi: HuggingFaceApi,
     private val folderId: String,
-    private val messageDao: ChatMessageDao
+    private val messageDao: ChatMessageDao,
+    private val customMcpApi: CustomMcpApi? = null // Опционально, может быть null на платформах без MCP сервера
 ) : ChatRepository {
 
     private val logger = Logger.withTag("ChatRepository")
@@ -504,6 +506,15 @@ class ChatRepositoryImpl(
 
         saveMessage(userMessage)
 
+        // Проверяем, является ли сообщение командой MCP
+        val trimmedText = text.trim()
+        if (trimmedText.startsWith("/mcp", ignoreCase = true)) {
+            // Это команда MCP - обрабатываем отдельно, без отправки в YandexGPT
+            logger.d { "Detected MCP command, processing separately from YandexGPT" }
+            return handleMcpCommand(text, userMessage)
+        }
+
+        // Обычное сообщение - отправляем в YandexGPT
         // Проверяем, нужно ли сжать историю
         compressHistoryIfNeeded(temperature)
 
@@ -515,6 +526,107 @@ class ChatRepositoryImpl(
 
         // Если выбрано несколько способов, отправляем запросы параллельно
         return sendMessageWithMultipleMethods(text, methods, userMessage, temperature)
+    }
+
+    /**
+     * Обрабатывает команду MCP отдельно, без отправки в YandexGPT
+     * Формат команды: /mcp <tool_name> [arguments]
+     * Примеры:
+     * - /mcp get_task_count
+     * - /mcp create_task title="Новая задача" description="Описание"
+     */
+    private suspend fun handleMcpCommand(
+        text: String,
+        userMessage: ChatMessage
+    ): Result<ChatMessage> {
+        if (customMcpApi == null) {
+            val errorMessage = ChatMessage(
+                id = ChatMessageMapper.generateId(),
+                content = "Ошибка: MCP сервер недоступен. Убедитесь, что сервер запущен.",
+                role = MessageRole.ASSISTANT,
+                timestamp = currentTime(),
+                isPending = false
+            )
+            saveMessage(errorMessage)
+            return Result.success(errorMessage)
+        }
+        
+        val trimmedText = text.trim()
+        
+        // Парсим команду: /mcp <tool_name> [arguments]
+        val parts = trimmedText.substringAfter("/mcp").trim().split(" ", limit = 2)
+        val toolName = parts.firstOrNull()?.takeIf { it.isNotEmpty() }
+        
+        if (toolName == null) {
+            val errorMessage = ChatMessage(
+                id = ChatMessageMapper.generateId(),
+                content = "Ошибка: не указано имя инструмента. Используйте: /mcp <tool_name>\n\nДоступные команды:\n• /mcp get_task_count\n• /mcp create_task title=\"...\" description=\"...\"",
+                role = MessageRole.ASSISTANT,
+                timestamp = currentTime(),
+                isPending = false
+            )
+            saveMessage(errorMessage)
+            return Result.success(errorMessage)
+        }
+        
+        // Парсим аргументы (если есть)
+        val arguments = mutableMapOf<String, String>()
+        if (parts.size > 1) {
+            val argsString = parts[1]
+            // Простой парсер для формата key="value" или key=value
+            val argPattern = Regex("""(\w+)=(?:"([^"]*)"|([^\s]+))""")
+            argPattern.findAll(argsString).forEach { matchResult ->
+                val key = matchResult.groupValues[1]
+                val value = matchResult.groupValues[2].takeIf { it.isNotEmpty() } 
+                    ?: matchResult.groupValues[3]
+                arguments[key] = value
+            }
+        }
+        
+        logger.d { "Processing MCP command: tool=$toolName, arguments=$arguments" }
+        
+        // Создаем pending сообщение для отображения индикатора загрузки
+        val pendingMessage = ChatMessage(
+            id = ChatMessageMapper.generateId(),
+            content = "Выполняется команда MCP: $toolName...",
+            role = MessageRole.ASSISTANT,
+            timestamp = currentTime(),
+            isPending = true
+        )
+        saveMessage(pendingMessage)
+        
+        return try {
+            val result = customMcpApi.callTool(toolName, arguments)
+            result.fold(
+                onSuccess = { toolResult ->
+                    logger.d { "MCP tool call successful: $toolResult" }
+                    // Обновляем pending сообщение с результатом
+                    val successMessage = pendingMessage.copy(
+                        content = toolResult,
+                        isPending = false
+                    )
+                    updateMessage(successMessage)
+                    Result.success(successMessage)
+                },
+                onFailure = { error ->
+                    logger.e(error) { "MCP tool call failed: ${error.message}" }
+                    val errorMessage = pendingMessage.copy(
+                        content = "Ошибка вызова инструмента MCP: ${error.message}",
+                        isPending = false
+                    )
+                    updateMessage(errorMessage)
+                    Result.success(errorMessage)
+                }
+            )
+        } catch (e: Exception) {
+            logger.e(e) { "Exception while calling MCP tool" }
+            val errorMessage = pendingMessage.copy(
+                content = "Ошибка вызова инструмента MCP: ${e.message}",
+                isPending = false
+            )
+            updateMessage(errorMessage)
+            Result.success(errorMessage)
+        }
     }
 
     /**

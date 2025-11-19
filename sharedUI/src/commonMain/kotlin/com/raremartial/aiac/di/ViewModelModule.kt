@@ -5,6 +5,11 @@ import org.koin.dsl.module
 
 val viewModelModule = module {
     
-    factory { ChatViewModel(repository = get()) }
+    factory { 
+        ChatViewModel(
+            repository = get(),
+            customMcpApi = getOrNull<com.raremartial.aiac.network.CustomMcpApi>()
+        ) 
+    }
 }
 

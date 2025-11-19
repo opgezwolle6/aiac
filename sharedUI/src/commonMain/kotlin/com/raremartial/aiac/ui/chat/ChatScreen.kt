@@ -40,8 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.raremartial.aiac.network.GitHubMcpApi
-import com.raremartial.aiac.network.models.McpTool
+// GitHub MCP скрыт для демонстрации работы с Яндекс.Трекер MCP
+// import com.raremartial.aiac.network.GitHubMcpApi
+// Логика загрузки MCP инструментов перенесена в ChatViewModel
 import com.raremartial.aiac.presentation.chat.ChatAction
 import com.raremartial.aiac.presentation.chat.ChatEvent
 import com.raremartial.aiac.presentation.chat.ChatViewModel
@@ -49,8 +50,8 @@ import com.raremartial.aiac.theme.LocalThemeIsDark
 import com.raremartial.aiac.ui.components.ChatInput
 import com.raremartial.aiac.ui.components.ChatMessageItem
 import com.raremartial.aiac.ui.components.ErrorSnackbar
-import com.raremartial.aiac.ui.components.TokenStatisticsCard
-import org.koin.compose.koinInject
+// Статистика токенов скрыта
+// import com.raremartial.aiac.ui.components.TokenStatisticsCard
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,29 +64,6 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val isDark by LocalThemeIsDark.current
-    
-    // MCP API для получения инструментов GitHub MCP Server
-    val mcpApi: GitHubMcpApi = koinInject()
-    var mcpTools by remember { mutableStateOf<List<McpTool>>(emptyList()) }
-    var isLoadingTools by remember { mutableStateOf(false) }
-    var toolsError by remember { mutableStateOf<String?>(null) }
-    
-    // Загружаем инструменты при открытии экрана
-    LaunchedEffect(Unit) {
-        isLoadingTools = true
-        toolsError = null
-        mcpApi.getTools()
-            .fold(
-                onSuccess = { tools ->
-                    mcpTools = tools
-                    isLoadingTools = false
-                },
-                onFailure = { error ->
-                    toolsError = error.message
-                    isLoadingTools = false
-                }
-            )
-    }
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
@@ -94,10 +72,10 @@ fun ChatScreen(
                 val itemCount = state.messages.size
                 val targetIndex = itemCount - 1
                 if (targetIndex >= 0 && itemCount > 0) {
-                listState.animateScrollToItem(
+                    listState.animateScrollToItem(
                         index = targetIndex,
-                    scrollOffset = 0
-                )
+                        scrollOffset = 0
+                    )
                 }
             }
         }
@@ -110,10 +88,10 @@ fun ChatScreen(
                     coroutineScope.launch {
                         val targetIndex = state.messages.size - 1
                         if (targetIndex >= 0 && state.messages.isNotEmpty()) {
-                        listState.animateScrollToItem(
+                            listState.animateScrollToItem(
                                 index = targetIndex,
-                            scrollOffset = 0
-                        )
+                                scrollOffset = 0
+                            )
                         }
                     }
                     viewModel.clearAction()
@@ -131,11 +109,11 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
+                title = {
                     Text(
                         "YandexGPT Чат",
                         style = MaterialTheme.typography.titleLarge
-                    ) 
+                    )
                 },
                 actions = {
                     // Кнопка очистки истории
@@ -155,7 +133,7 @@ fun ChatScreen(
                             }
                         )
                     }
-                    
+
                     // Кнопка переключения темы
                     val themeState = LocalThemeIsDark.current
                     IconButton(
@@ -187,171 +165,240 @@ fun ChatScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                // Включаем прокрутку даже для одного элемента
-                userScrollEnabled = true
-            ) {
-                // Статистика токенов как элемент списка
-                item {
-                    TokenStatisticsCard(messages = state.messages)
-                }
-                
-                // Карточка с инструментами MCP как элемент списка
-                item {
-                    if (isLoadingTools) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Row(
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    // Включаем прокрутку даже для одного элемента
+                    userScrollEnabled = true
+                ) {
+                    // Статистика токенов скрыта
+                    // item {
+                    //     TokenStatisticsCard(messages = state.messages)
+                    // }
+
+                    // Карточка с инструментами MCP как элемент списка
+                    if (state.isLoadingMcpTools) {
+                        item(key = "loading_tools") {
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Text(
-                                    text = "Загрузка инструментов MCP...",
-                                    modifier = Modifier.padding(start = 12.dp),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = "Загрузка инструментов MCP...",
+                                        modifier = Modifier.padding(start = 12.dp),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
-                    } else if (toolsError != null) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Text(
-                                text = "Ошибка загрузки инструментов: $toolsError",
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    } else if (mcpTools.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                Text(
-                                    text = "Инструменты GitHub MCP Server (${mcpTools.size})",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 12.dp)
-                                )
-                                mcpTools.forEachIndexed { index, tool ->
+                    } else {
+                        val errorMessage = state.mcpToolsError
+                        if (errorMessage != null) {
+                            item(key = "tools_error") {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
                                     Column(
-                                        modifier = Modifier.padding(vertical = 4.dp)
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = "${index + 1}. ${tool.name}",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = "⚠️ Ошибка подключения к MCP серверу",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
                                         )
-                                        if (!tool.description.isNullOrBlank()) {
+                                        Text(
+                                            text = errorMessage,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = "Проверьте логи приложения для подробностей. Убедитесь, что порт 8080 свободен.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Карточка с командами Яндекс.Трекер MCP
+                    if (state.customMcpTools.isNotEmpty()) {
+                        item(key = "custom_mcp_tools") {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "🔧 Команды Яндекс.Трекер MCP",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                    Text(
+                                        text = "Используйте команду /mcp для вызова инструментов:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                            alpha = 0.8f
+                                        ),
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                    state.customMcpTools.forEachIndexed { index, tool ->
+                                        Column(
+                                            modifier = Modifier
+                                                .padding(vertical = 6.dp)
+                                                .fillMaxWidth()
+                                        ) {
                                             Text(
-                                                text = tool.description,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                                                text = "/mcp ${tool.name}",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                             )
-                                        }
-                                        if (index < mcpTools.size - 1) {
-                                            androidx.compose.foundation.layout.Spacer(
-                                                modifier = Modifier.padding(vertical = 8.dp)
-                                            )
+                                            if (!tool.description.isNullOrBlank()) {
+                                                Text(
+                                                    text = tool.description,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                        alpha = 0.7f
+                                                    ),
+                                                    modifier = Modifier.padding(
+                                                        start = 8.dp,
+                                                        top = 2.dp
+                                                    )
+                                                )
+                                            }
+                                            // Показываем примеры использования
+                                            when (tool.name) {
+                                                "get_task_count" -> {
+                                                    Text(
+                                                        text = "Пример: /mcp get_task_count",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                            alpha = 0.6f
+                                                        ),
+                                                        modifier = Modifier.padding(
+                                                            start = 8.dp,
+                                                            top = 4.dp
+                                                        ),
+                                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                                    )
+                                                }
+
+                                                "create_task" -> {
+                                                    Text(
+                                                        text = "Пример: /mcp create_task title=\"Новая задача\" description=\"Описание\"",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                                            alpha = 0.6f
+                                                        ),
+                                                        modifier = Modifier.padding(
+                                                            start = 8.dp,
+                                                            top = 4.dp
+                                                        ),
+                                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                                    )
+                                                }
+                                            }
+                                            if (index < state.customMcpTools.size - 1) {
+                                                androidx.compose.foundation.layout.Spacer(
+                                                    modifier = Modifier.padding(vertical = 8.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    } else {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Text(
-                                text = "Инструменты MCP не найдены",
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                            )
-                        }
                     }
-                }
-                
-                // Сообщения чата
-                items(
-                    items = state.messages,
-                    key = { it.id }
-                ) { message ->
-                    ChatMessageItem(
-                        message = message,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                
-                // Пустое состояние
-                if (state.messages.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+
+                    // GitHub MCP Server - скрыто для демонстрации работы с Яндекс.Трекер MCP
+                    // if (githubMcpTools.isNotEmpty()) {
+                    //     item(key = "github_mcp_tools") {
+                    //         Card(...)
+                    //     }
+                    // }
+
+                    // Не показываем сообщение "Инструменты MCP не найдены", 
+                    // если Custom MCP недоступен (сервер может быть не запущен или недоступен)
+                    // Это нормально для платформ, где MCP сервер не работает (не JVM)
+
+                    // Сообщения чата
+                    items(
+                        items = state.messages,
+                        key = { it.id }
+                    ) { message ->
+                        ChatMessageItem(
+                            message = message,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Пустое состояние
+                    if (state.messages.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Начните диалог с YandexGPT",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                )
-                                Text(
-                                    text = "Введите сообщение и нажмите Enter или отправьте",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Начните диалог с YandexGPT",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+                                    Text(
+                                        text = "Введите сообщение и нажмите Enter или отправьте",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
+
 
                 Column(
                     modifier = Modifier
@@ -367,13 +414,13 @@ fun ChatScreen(
                         text = state.inputText,
                         onTextChange = { viewModel.handleAction(ChatAction.UpdateInputText(it)) },
                         onSendClick = {
-                                viewModel.handleAction(
-                                    ChatAction.SendMessage(
-                                        state.inputText,
-                                        state.selectedMethods,
-                                        state.selectedTemperature
-                                    )
+                            viewModel.handleAction(
+                                ChatAction.SendMessage(
+                                    state.inputText,
+                                    state.selectedMethods,
+                                    state.selectedTemperature
                                 )
+                            )
                         },
                         enabled = !state.isLoading
                     )
@@ -389,4 +436,3 @@ fun ChatScreen(
         }
     }
 }
-

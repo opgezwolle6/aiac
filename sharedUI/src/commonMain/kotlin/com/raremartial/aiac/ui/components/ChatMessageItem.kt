@@ -145,20 +145,20 @@ fun ChatMessageItem(
                                     }
                                 }
                                 
-                                // Статистика токенов для множественных способов
-                                currentMessage.tokenUsage?.let { usage ->
-                                    if (usage.totalTokens > 0) {
-                                        Divider(
-                                            modifier = Modifier.padding(vertical = 4.dp),
-                                            color = contentColor.copy(alpha = 0.3f)
-                                        )
-                                        Text(
-                                            text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = contentColor.copy(alpha = 0.6f)
-                                        )
-                                    }
-                                }
+                                // Статистика токенов скрыта
+                                // currentMessage.tokenUsage?.let { usage ->
+                                //     if (usage.totalTokens > 0) {
+                                //         Divider(
+                                //             modifier = Modifier.padding(vertical = 4.dp),
+                                //             color = contentColor.copy(alpha = 0.3f)
+                                //         )
+                                //         Text(
+                                //             text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
+                                //             style = MaterialTheme.typography.bodySmall,
+                                //             color = contentColor.copy(alpha = 0.6f)
+                                //         )
+                                //     }
+                                // }
                             }
                         }
                         // Если есть структурированные данные (один способ)
@@ -183,17 +183,17 @@ fun ChatMessageItem(
                                     color = contentColor,
                                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                                 )
-                                // Статистика токенов
-                                currentMessage.tokenUsage?.let { usage ->
-                                    if (usage.totalTokens > 0) {
-                                        Text(
-                                            text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = contentColor.copy(alpha = 0.6f),
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        )
-                                    }
-                                }
+                                // Статистика токенов скрыта
+                                // currentMessage.tokenUsage?.let { usage ->
+                                //     if (usage.totalTokens > 0) {
+                                //         Text(
+                                //             text = "Токены: входные ${usage.inputTokens}, выходные ${usage.outputTokens}, всего ${usage.totalTokens}",
+                                //             style = MaterialTheme.typography.bodySmall,
+                                //             color = contentColor.copy(alpha = 0.6f),
+                                //             modifier = Modifier.padding(top = 4.dp)
+                                //         )
+                                //     }
+                                // }
                             }
                         }
                         // Обычный контент
